@@ -168,11 +168,40 @@ source $ZSH/oh-my-zsh.sh
 alias ls='ls --color=auto'
 alias grep='grep --color=auto'
 alias update='sudo apt update && sudo apt upgrade -y' # Ganti 'apt' jika perlu
+# Directories
 alias ..='cd ..'
+alias ...='cd ../..'
+alias ....='cd ../../..'
 
 # Key binding untuk vi-mode
 bindkey -v
 export KEYTIMEOUT=1
+
+# shove: git add, commit with message, confirm before push
+shove() {
+  git add .
+  git commit -m "$*"
+  echo -n "Push to origin? (y/n): "
+  read confirm
+  if [[ "$confirm" =~ ^[Yy]$ ]]; then
+    git push origin
+  else
+    echo "❌ Push cancelled."
+  fi
+}
+
+# shovenc: commit tanpa pesan, konfirmasi sebelum push
+shovenc() {
+  git add .
+  git commit --allow-empty-message -m ""
+  echo -n "Push to origin? (y/n): "
+  read confirm
+  if [[ "$confirm" =~ ^[Yy]$ ]]; then
+    git push origin
+  else
+    echo "❌ Push cancelled."
+  fi
+}
 
 EOL
 
