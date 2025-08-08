@@ -334,6 +334,25 @@ esac
 printf "\n${C_GREEN}Memulai eksekusi...${C_RESET}\n\n"
 trap 'printf "\n${C_YELLOW}Dibatalkan oleh pengguna.${C_RESET}\n"; exit 130' INT
 
+# Cek di awal apakah ada skrip yang butuh sudo, jika ada, minta password di muka
+needs_sudo_check=0
+for idx in "${selected_indexes[@]}"; do
+  if head -n 3 "${scripts[$idx]}" | grep -q "# needs-sudo"; then
+    needs_sudo_check=1
+    break
+  fi
+done
+
+if [[ $needs_sudo_check -eq 1 ]]; then
+  printf "\n${C_YELLOW}Beberapa skrip yang dipilih memerlukan hak akses root.${C_RESET}\n"
+  printf "${C_YELLOW}Meminta kata sandi sudo di awal...${C_RESET}\n"
+  if ! sudo -v; then
+    printf "${C_RED}Gagal mendapatkan hak akses sudo. Dibatalkan.${C_RESET}\n"
+    exit 1
+  fi
+  printf "${C_GREEN}Hak akses sudo berhasil didapatkan.${C_RESET}\n\n"
+fi
+
 declare -a succeeded
 declare -a failed
 succeeded=()
@@ -344,7 +363,15 @@ for idx in "${selected_indexes[@]}"; do
   printf "${C_BLUE}--- Menjalankan:${C_RESET} ${C_BOLD}%s${C_RESET}\n" "$script_name"
   chmod +x "$script_path" || true
   start_ts=$(date +%s)
-  if ! bash "$script_path"; then
+  # Cek apakah skrip butuh sudo
+  cmd="bash"
+  # Baca 3 baris pertama, cari flag
+  if head -n 3 "$script_path" | grep -q "# needs-sudo"; then
+    printf "${C_YELLOW}Skrip ini memerlukan hak akses root (sudo).${C_RESET}\n"
+    cmd="sudo bash"
+  fi
+
+  if ! $cmd "$script_path"; then
     printf "${C_RED}Gagal menjalankan:${C_RESET} %s\n" "$script_name"
     read -rp $'Lanjut ke skrip berikutnya? (y/n): ' cont
     if [[ ! "$cont" =~ ^[yY]$ ]]; then

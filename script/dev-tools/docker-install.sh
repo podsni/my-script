@@ -1,4 +1,5 @@
 #!/bin/bash
+# needs-sudo
 
 # ==============================================================================
 # Skrip Instalasi Docker Otomatis untuk Distribusi Linux Populer
