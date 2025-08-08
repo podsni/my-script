@@ -2,7 +2,15 @@
 
 set -euo pipefail
 
-echo "Selamat datang, Hendra!"
+# Warna sederhana
+C_RESET='\033[0m'
+C_BOLD='\033[1m'
+C_BLUE='\033[0;34m'
+C_GREEN='\033[0;32m'
+C_YELLOW='\033[0;33m'
+C_RED='\033[0;31m'
+
+printf "${C_BOLD}${C_BLUE}Selamat datang, Hendra!${C_RESET}\n"
 
 # ------------------------------------------------------------
 # Bootstrap: clone/pull repo bila tidak berjalan dari repo lokal
@@ -45,16 +53,16 @@ if [[ ${#scripts[@]} -eq 0 ]]; then
   exit 0
 fi
 
-echo "\nSilakan pilih skrip yang ingin dijalankan (dari folder 'script/'):\n"
+printf "\n${C_BOLD}Silakan pilih skrip yang ingin dijalankan (dari folder 'script/'):${C_RESET}\n\n"
 for i in "${!scripts[@]}"; do
   script_name="$(basename "${scripts[$i]}")"
   printf "  %2d) %s\n" "$((i+1))" "$script_name"
-fi
+done
 
-echo "\nOpsi input:"
-echo "- Masukkan nomor dipisah spasi (misal: 1 3 5)"
-echo "- Atau ketik 'a' untuk memilih semua"
-echo "- Atau ketik 'q' untuk keluar"
+printf "\n${C_BOLD}Opsi input:${C_RESET}\n"
+printf "- Masukkan nomor dipisah spasi (misal: 1 3 5)\n"
+printf "- Atau ketik 'a' untuk memilih semua\n"
+printf "- Atau ketik 'q' untuk keluar\n"
 
 read -rp $'Masukkan pilihan Anda: ' choice
 
@@ -89,7 +97,7 @@ if [[ ${#selected_indexes[@]} -eq 0 ]]; then
   exit 0
 fi
 
-echo "\nSkrip yang akan dijalankan:" 
+printf "\n${C_BOLD}Skrip yang akan dijalankan:${C_RESET}\n"
 for idx in "${selected_indexes[@]}"; do
   echo "- $(basename "${scripts[$idx]}")"
 done
@@ -100,25 +108,25 @@ if [[ ! "$confirm" =~ ^[yY]$ ]]; then
   exit 0
 fi
 
-echo "\nMemulai eksekusi...\n"
+printf "\n${C_GREEN}Memulai eksekusi...${C_RESET}\n\n"
 for idx in "${selected_indexes[@]}"; do
   script_path="${scripts[$idx]}"
   script_name="$(basename "$script_path")"
-  echo "--- Menjalankan: $script_name ---"
+  printf "${C_BLUE}--- Menjalankan:${C_RESET} ${C_BOLD}%s${C_RESET}\n" "$script_name"
   chmod +x "$script_path" || true
   if ! bash "$script_path"; then
-    echo "Gagal menjalankan: $script_name"
+    printf "${C_RED}Gagal menjalankan:${C_RESET} %s\n" "$script_name"
     read -rp $'Lanjut ke skrip berikutnya? (y/n): ' cont
     if [[ ! "$cont" =~ ^[yY]$ ]]; then
       echo "Dihentikan oleh pengguna."
       exit 1
     fi
   else
-    echo "Selesai: $script_name"
+    printf "${C_GREEN}Selesai:${C_RESET} %s\n" "$script_name"
   fi
   echo
 done
 
-echo "Semua skrip terpilih telah diproses."
+printf "${C_BOLD}Semua skrip terpilih telah diproses.${C_RESET}\n"
 
 
