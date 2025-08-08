@@ -53,44 +53,58 @@ if [[ ${#scripts[@]} -eq 0 ]]; then
   exit 0
 fi
 
-printf "\n${C_BOLD}Silakan pilih skrip yang ingin dijalankan (dari folder 'script/'):${C_RESET}\n\n"
-for i in "${!scripts[@]}"; do
-  script_name="$(basename "${scripts[$i]}")"
-  printf "  %2d) %s\n" "$((i+1))" "$script_name"
-done
+# --- Menu interaktif (toggle) ---
+declare -a selected_status=()
+for ((i=0; i<${#scripts[@]}; i++)); do selected_status[$i]=0; done
 
-printf "\n${C_BOLD}Opsi input:${C_RESET}\n"
-printf "- Masukkan nomor dipisah spasi (misal: 1 3 5)\n"
-printf "- Atau ketik 'a' untuk memilih semua\n"
-printf "- Atau ketik 'q' untuk keluar\n"
-
-read -rp $'Masukkan pilihan Anda: ' choice
-
-if [[ "$choice" =~ ^[qQ]$ ]]; then
-  echo "Dibatalkan."
-  exit 0
-fi
-
-selected_indexes=()
-if [[ "$choice" =~ ^[aA]$ ]]; then
-  for i in "${!scripts[@]}"; do selected_indexes+=("$i"); done
-else
-  # Parse angka-angka
-  for token in $choice; do
-    if [[ "$token" =~ ^[0-9]+$ ]]; then
-      idx=$((token-1))
-      if (( idx >= 0 && idx < ${#scripts[@]} )); then
-        selected_indexes+=("$idx")
-      else
-        echo "Nomor di luar jangkauan: $token"
-        exit 1
-      fi
+print_menu() {
+  printf "\n${C_BOLD}Silakan pilih skrip yang ingin dijalankan (dari folder 'script/'):${C_RESET}\n\n"
+  for i in "${!scripts[@]}"; do
+    script_name="$(basename "${scripts[$i]}")"
+    if [[ ${selected_status[$i]} -eq 1 ]]; then
+      printf "  ${C_GREEN}[x]${C_RESET} %2d) %s\n" "$((i+1))" "$script_name"
     else
-      echo "Input tidak valid: $token"
-      exit 1
+      printf "  [ ] %2d) %s\n" "$((i+1))" "$script_name"
     fi
   done
-fi
+  printf "\n${C_BOLD}Opsi:${C_RESET}\n"
+  printf "%s\n" "- Ketik nomor untuk toggle (boleh banyak: 1 3 5)"
+  printf "%s\n" "- 'a' pilih semua, 'n' batal semua, 'c' lanjut, 'q' keluar"
+}
+
+while true; do
+  print_menu
+  read -rp $'Masukkan pilihan Anda: ' choice
+  case "$choice" in
+    [qQ]) echo "Dibatalkan."; exit 0 ;;
+    [cC])
+      # pastikan ada yang dipilih
+      any=0; for v in "${selected_status[@]}"; do if [[ $v -eq 1 ]]; then any=1; break; fi; done
+      if [[ $any -eq 1 ]]; then break; else printf "${C_YELLOW}Belum ada yang dipilih.${C_RESET}\n"; fi
+      ;;
+    [aA]) for i in "${!selected_status[@]}"; do selected_status[$i]=1; done ;;
+    [nN]) for i in "${!selected_status[@]}"; do selected_status[$i]=0; done ;;
+    *)
+      # izinkan banyak angka dipisah spasi
+      valid=1
+      for token in $choice; do
+        if [[ "$token" =~ ^[0-9]+$ ]]; then
+          idx=$((token-1))
+          if (( idx >= 0 && idx < ${#scripts[@]} )); then
+            if [[ ${selected_status[$idx]} -eq 1 ]]; then selected_status[$idx]=0; else selected_status[$idx]=1; fi
+          else
+            printf "${C_RED}Nomor di luar jangkauan:${C_RESET} %s\n" "$token"; valid=0
+          fi
+        else
+          printf "${C_RED}Input tidak valid:${C_RESET} %s\n" "$token"; valid=0
+        fi
+      done
+      ;;
+  esac
+done
+
+selected_indexes=()
+for i in "${!selected_status[@]}"; do if [[ ${selected_status[$i]} -eq 1 ]]; then selected_indexes+=("$i"); fi; done
 
 if [[ ${#selected_indexes[@]} -eq 0 ]]; then
   echo "Tidak ada skrip yang dipilih. Keluar."
