@@ -11,6 +11,8 @@ set -euo pipefail
 #   sudo ./set-hostname.sh -n server1.example.local
 #   sudo ./set-hostname.sh -n server1 -d example.local -p "Server One" -I 192.168.1.10
 #
+# If you run without -n in an interactive terminal, a guided wizard will start.
+#
 # Options:
 #   -n  New hostname (short or FQDN)
 #   -d  Domain (optional; used if -n is short)
@@ -36,6 +38,10 @@ Examples:
   set-hostname.sh -n server1 -d example.local
   set-hostname.sh -n server1.example.local
   set-hostname.sh -n server1 -d example.local -p "Server One" -I 192.168.1.10
+
+Interactive:
+  If -n is omitted and you're in a TTY, an interactive wizard will ask:
+  hostname, domain (optional), pretty name (optional), mapping IP, and method.
 EOF
 }
 
@@ -136,6 +142,108 @@ pretty=""
 map_ip=""
 method="auto"
 
+# Helpers for interactive mode
+is_tty() { [[ -t 0 && -t 1 ]]; }
+prompt_default() {
+  local prompt="$1"; shift
+  local default_val="$1"; shift || true
+  local var
+  if [[ -n "$default_val" ]]; then
+    read -rp "$prompt [$default_val]: " var
+    echo "${var:-$default_val}"
+  else
+    read -rp "$prompt: " var
+    echo "$var"
+  fi
+}
+prompt_yes_no() {
+  local prompt="$1"; shift
+  local def="$1"; shift || true
+  local ans
+  if [[ "$def" =~ ^[Yy]$ ]]; then
+    read -rp "$prompt [Y/n]: " ans; ans=${ans:-y}
+  else
+    read -rp "$prompt [y/N]: " ans; ans=${ans:-n}
+  fi
+  [[ "$ans" =~ ^[Yy]$ ]]
+}
+
+run_wizard() {
+  local cur_hn
+  cur_hn=$(hostname -f 2>/dev/null || hostname 2>/dev/null || echo "")
+  echo "Interactive hostname setup"
+  echo "Current hostname: ${cur_hn}"
+
+  # Ask hostname or FQDN
+  local input_hn
+  input_hn=$(prompt_default "Enter new hostname (short or FQDN)" "${cur_hn}")
+  while ! validate_hostname "$input_hn"; do
+    echo "Invalid hostname format. Please follow RFC-1123 (letters, digits, hyphens)."
+    input_hn=$(prompt_default "Enter new hostname (short or FQDN)" "")
+  done
+
+  # If short without dot, optionally ask domain
+  local input_domain=""
+  if [[ "$input_hn" != *.* ]]; then
+    input_domain=$(prompt_default "Enter domain (optional, to form FQDN)" "")
+    if [[ -n "$input_domain" ]]; then
+      local combined="${input_hn}.${input_domain}"
+      if validate_hostname "$combined"; then
+        input_hn="$combined"
+      else
+        echo "Warning: domain ignored because resulting FQDN is invalid."
+      fi
+    fi
+  fi
+
+  # Pretty hostname
+  local suggested_pretty
+  suggested_pretty="${input_hn%%.*}"
+  suggested_pretty="${suggested_pretty//-/ }"
+  suggested_pretty="${suggested_pretty^}"
+  local input_pretty
+  input_pretty=$(prompt_default "Pretty hostname (optional)" "$suggested_pretty")
+  if [[ -z "$input_pretty" ]]; then input_pretty=""; fi
+
+  # Mapping IP
+  local suggested_ip
+  suggested_ip=$(choose_default_hosts_ip)
+  local input_ip
+  input_ip=$(prompt_default "IP to map in /etc/hosts" "$suggested_ip")
+
+  # Method
+  local default_method="auto"
+  if command -v hostnamectl >/dev/null 2>&1; then
+    default_method="hostnamectl"
+  else
+    default_method="etc"
+  fi
+  local input_method
+  input_method=$(prompt_default "Method [auto/hostnamectl/etc]" "$default_method")
+  case "$input_method" in
+    auto|hostnamectl|etc) ;;
+    *) echo "Unknown method, using 'auto'."; input_method="auto" ;;
+  esac
+
+  # Summary
+  echo
+  echo "Summary:"
+  echo "  FQDN        : $input_hn"
+  echo "  Pretty      : ${input_pretty:-<none>}"
+  echo "  /etc/hosts IP: $input_ip"
+  echo "  Method      : $input_method"
+  echo
+  if prompt_yes_no "Proceed?" y; then
+    name="$input_hn"
+    # domain stays blank because name may already be FQDN
+    pretty="$input_pretty"
+    map_ip="$input_ip"
+    method="$input_method"
+  else
+    echo "Aborted by user."; exit 0
+  fi
+}
+
 while getopts ":n:d:p:I:m:h" opt; do
   case "$opt" in
     n) name="$OPTARG" ;;
@@ -149,12 +257,15 @@ while getopts ":n:d:p:I:m:h" opt; do
   esac
 done
 
-require_root
-
+# Interactive wizard when no -n provided and running in TTY
 if [[ -z "$name" ]]; then
-  echo "Error: -n HOSTNAME is required." >&2
-  print_help
-  exit 2
+  if is_tty; then
+    run_wizard
+  else
+    echo "Error: -n HOSTNAME is required (non-interactive)." >&2
+    print_help
+    exit 2
+  fi
 fi
 
 # Derive FQDN and short host
@@ -188,7 +299,25 @@ else
   fi
 fi
 
+ensure_root_or_reexec() {
+  if [[ ${EUID} -ne 0 ]]; then
+    if ! command -v sudo >/dev/null 2>&1; then
+      echo "Error: must run as root (sudo not available)" >&2
+      exit 1
+    fi
+    echo "Elevating privileges with sudo..."
+    # Re-exec this script with the resolved parameters so we skip the wizard
+    argv=("-n" "$fqdn")
+    [[ -n "$pretty" ]] && argv+=("-p" "$pretty")
+    [[ -n "$map_ip" ]] && argv+=("-I" "$map_ip")
+    [[ -n "$method" ]] && argv+=("-m" "$method")
+    exec sudo -E bash "$0" "${argv[@]}"
+  fi
+}
+
 echo "Using method: ${chosen_method}; hosts mapping IP: ${map_ip}"
+
+ensure_root_or_reexec
 
 case "$chosen_method" in
   hostnamectl)
