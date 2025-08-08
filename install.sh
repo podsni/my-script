@@ -334,6 +334,25 @@ esac
 printf "\n${C_GREEN}Memulai eksekusi...${C_RESET}\n\n"
 trap 'printf "\n${C_YELLOW}Dibatalkan oleh pengguna.${C_RESET}\n"; exit 130' INT
 
+# Cek di awal apakah ada skrip yang butuh sudo, jika ada, minta password di muka
+needs_sudo_check=0
+for idx in "${selected_indexes[@]}"; do
+  if head -n 3 "${scripts[$idx]}" | grep -q "# needs-sudo"; then
+    needs_sudo_check=1
+    break
+  fi
+done
+
+if [[ $needs_sudo_check -eq 1 ]]; then
+  printf "\n${C_YELLOW}Beberapa skrip yang dipilih memerlukan hak akses root.${C_RESET}\n"
+  printf "${C_YELLOW}Meminta kata sandi sudo di awal...${C_RESET}\n"
+  if ! sudo -v; then
+    printf "${C_RED}Gagal mendapatkan hak akses sudo. Dibatalkan.${C_RESET}\n"
+    exit 1
+  fi
+  printf "${C_GREEN}Hak akses sudo berhasil didapatkan.${C_RESET}\n\n"
+fi
+
 declare -a succeeded
 declare -a failed
 succeeded=()
