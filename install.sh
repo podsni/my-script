@@ -344,7 +344,15 @@ for idx in "${selected_indexes[@]}"; do
   printf "${C_BLUE}--- Menjalankan:${C_RESET} ${C_BOLD}%s${C_RESET}\n" "$script_name"
   chmod +x "$script_path" || true
   start_ts=$(date +%s)
-  if ! bash "$script_path"; then
+  # Cek apakah skrip butuh sudo
+  cmd="bash"
+  # Baca 3 baris pertama, cari flag
+  if head -n 3 "$script_path" | grep -q "# needs-sudo"; then
+    printf "${C_YELLOW}Skrip ini memerlukan hak akses root (sudo).${C_RESET}\n"
+    cmd="sudo bash"
+  fi
+
+  if ! $cmd "$script_path"; then
     printf "${C_RED}Gagal menjalankan:${C_RESET} %s\n" "$script_name"
     read -rp $'Lanjut ke skrip berikutnya? (y/n): ' cont
     if [[ ! "$cont" =~ ^[yY]$ ]]; then
