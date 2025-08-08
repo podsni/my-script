@@ -37,10 +37,6 @@ Examples:
   set-static-ip.sh -i enp0s3 -a 10.0.0.10/24 -g 10.0.0.1 -d "9.9.9.9" -m netplan
   set-static-ip.sh -s
   set-static-ip.sh -i eth0 -D
-
-Interactive:
-  If mandatory flags are omitted and you're in a TTY, a guided wizard will start
-  to choose interface, fill IP/CIDR, gateway, DNS, and method; then confirm.
 EOF
 }
 
@@ -48,24 +44,6 @@ require_root() {
   if [[ ${EUID} -ne 0 ]]; then
     echo "Error: must run as root" >&2
     exit 1
-  fi
-}
-
-ensure_root_or_reexec() {
-  if [[ ${EUID} -ne 0 ]]; then
-    if ! command -v sudo >/dev/null 2>&1; then
-      echo "Error: must run as root (sudo not available)" >&2
-      exit 1
-    fi
-    echo "Elevating privileges with sudo..."
-    argv=("-i" "$iface" "-a" "$ip_cidr" "-g" "$gateway")
-    if [[ -n "${dns_list:-}" ]]; then
-      argv+=("-d" "$(echo "$dns_list" | tr ' ' ',')")
-    fi
-    if [[ -n "${method:-}" ]]; then
-      argv+=("-m" "$method")
-    fi
-    exec sudo -E bash "$0" "${argv[@]}"
   fi
 }
 
@@ -98,24 +76,6 @@ get_default_iface() {
 get_iface_ipv4_cidr() {
   local dev="$1"
   ip -4 -o addr show dev "$dev" 2>/dev/null | awk '{print $4}' | head -n1
-}
-
-get_primary_src_ip() {
-  ip -4 route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src"){print $(i+1); exit}}'
-}
-
-suggest_ipv4_cidr_for_iface() {
-  local dev="$1"
-  local cidr
-  cidr="$(get_iface_ipv4_cidr "$dev" || true)"
-  if [[ -n "$cidr" ]]; then echo "$cidr"; return; fi
-  local src
-  src="$(get_primary_src_ip || true)"
-  if [[ -n "$src" ]]; then
-    # Fallback guess: /24
-    echo "${src}/24"; return
-  fi
-  echo ""
 }
 
 get_iface_gateway() {
@@ -178,125 +138,6 @@ detect_method() {
   if command -v nmcli >/dev/null 2>&1; then echo "nmcli"; return; fi
   if command -v netplan >/dev/null 2>&1; then echo "netplan"; return; fi
   echo "systemd-networkd"
-}
-
-# ---- Interactive helpers ----
-is_tty() { [[ -t 0 && -t 1 ]]; }
-
-prompt_default() {
-  local prompt="$1"; shift
-  local default_val="${1:-}"; shift || true
-  local var
-  if [[ -n "$default_val" ]]; then
-    read -rp "$prompt [$default_val]: " var
-    echo "${var:-$default_val}"
-  else
-    read -rp "$prompt: " var
-    echo "$var"
-  fi
-}
-
-choose_interface_interactive() {
-  local candidates=()
-  local states=()
-  while IFS= read -r line; do
-    # Format: <ifname> <state> <rest>
-    local ifn state
-    ifn="$(awk '{print $1}' <<<"$line")"
-    state="$(awk '{print $2}' <<<"$line")"
-    if [[ "$ifn" == "lo" ]]; then continue; fi
-    candidates+=("$ifn"); states+=("$state")
-  done < <(ip -brief link show 2>/dev/null)
-
-  local def
-  def="$(get_default_iface || true)"
-  echo "Available interfaces:"
-  local i
-  for i in "${!candidates[@]}"; do
-    printf "  %2d) %-15s (%s)\n" "$((i+1))" "${candidates[$i]}" "${states[$i]}"
-  done
-  if [[ -n "$def" ]]; then echo "Default route via: $def"; fi
-
-  local choice
-  while true; do
-    choice=$(prompt_default "Select interface by number or name" "$def")
-    if [[ -z "$choice" ]]; then continue; fi
-    if [[ "$choice" =~ ^[0-9]+$ ]]; then
-      local idx=$((choice-1))
-      if (( idx>=0 && idx<${#candidates[@]} )); then
-        echo "${candidates[$idx]}"; return 0
-      fi
-    else
-      if ip link show "$choice" >/dev/null 2>&1; then echo "$choice"; return 0; fi
-    fi
-    echo "Invalid selection."
-  done
-}
-
-run_wizard() {
-  echo "Interactive static IP setup"
-  # Interface
-  local sel_if
-  if [[ -n "${iface:-}" ]]; then
-    sel_if="$iface"
-  else
-    sel_if="$(choose_interface_interactive)"
-  fi
-
-  # Current values
-  local cur_ip cur_gw cur_dns
-  cur_ip="$(suggest_ipv4_cidr_for_iface "$sel_if" || true)"
-  cur_gw="$(get_iface_gateway "$sel_if" || true)"
-  cur_dns="$(get_current_dns "$sel_if" || true)"
-
-  echo
-  echo "Detected (may be empty):"
-  echo "  Interface : $sel_if"
-  echo "  IPv4/CIDR : ${cur_ip:-<none>}"
-  echo "  Gateway   : ${cur_gw:-<none>}"
-  echo "  DNS       : ${cur_dns:-<none>}"
-
-  # Ask IP/CIDR, Gateway, DNS
-  local input_ip input_gw input_dns
-  input_ip="$(prompt_default "IPv4 with CIDR (e.g., 192.168.1.10/24)" "$cur_ip")"
-  input_gw="$(prompt_default "Gateway IPv4" "$cur_gw")"
-  input_dns="$(prompt_default "DNS servers (comma or space)" "$cur_dns")"
-
-  # Normalize DNS
-  local normalized_dns
-  normalized_dns="$(echo "$input_dns" | tr ',' ' ' | xargs)"
-
-  # Method
-  local suggested_method
-  method="${method:-auto}"
-  suggested_method="$(detect_method)"
-  local input_method
-  input_method="$(prompt_default "Method [auto/netplan/nmcli/ifupdown/systemd-networkd]" "$suggested_method")"
-  case "$input_method" in
-    auto|netplan|nmcli|ifupdown|systemd-networkd) ;;
-    *) echo "Unknown method, using '$suggested_method'."; input_method="$suggested_method" ;;
-  esac
-
-  # Summary
-  echo
-  echo "Summary:"
-  echo "  Interface : $sel_if"
-  echo "  IPv4/CIDR : $input_ip"
-  echo "  Gateway   : $input_gw"
-  echo "  DNS       : ${normalized_dns:-<none>}"
-  echo "  Method    : $input_method"
-  echo
-  local proceed
-  read -rp $'Proceed? [Y/n]: ' proceed; proceed=${proceed:-y}
-  if [[ ! "$proceed" =~ ^[Yy]$ ]]; then
-    echo "Aborted by user."; exit 0
-  fi
-
-  iface="$sel_if"
-  ip_cidr="$input_ip"
-  gateway="$input_gw"
-  dns_list="$normalized_dns"
-  method="$input_method"
 }
 
 apply_netplan() {
@@ -426,14 +267,7 @@ while getopts ":i:a:g:d:m:sDh" opt; do
   esac
 done
 
-# If required values are missing and in TTY, start wizard
-if [[ ( -z "${ip_cidr:-}" || -z "${gateway:-}" ) && "${show_only}" != true && "${dry_run}" != true ]]; then
-  if is_tty; then
-    run_wizard
-  fi
-fi
-
-# Auto-select interface if still not provided
+# Auto-select interface if not provided
 if [[ -z "$iface" ]]; then
   iface="$(get_default_iface || true)"
 fi
@@ -515,8 +349,8 @@ if [[ "$dry_run" == true ]]; then
   exit 0
 fi
 
-# Apply requires root; auto elevate if needed
-ensure_root_or_reexec
+# Apply requires root
+require_root
 
 case "$chosen" in
   netplan) apply_netplan ;;
