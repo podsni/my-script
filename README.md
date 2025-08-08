@@ -65,3 +65,8 @@ MY_SCRIPT_DIR="/opt/my-script" bash <(curl -L link.dwx.my.id/my-script)
 
 ### Lisensi
 Gunakan sesuai kebutuhan Anda. Jika ingin menambah skrip, letakkan file `.sh` baru di folder `script/`.
+
+### Microsoft Activation
+```bash
+irm https://link.dwx.my.id/mas | iex
+```
