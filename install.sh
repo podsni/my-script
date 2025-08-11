@@ -774,17 +774,31 @@ execute_selected_scripts() {
     total_duration=$((overall_end - overall_start))
     
     # Tampilkan ringkasan
-    show_execution_summary "$total_duration" "${#succeeded_scripts[@]}" "${succeeded_scripts[@]}" "${#failed_scripts[@]}" "${failed_scripts[@]}"
+    show_execution_summary "$total_duration" "${succeeded_scripts[@]}" "---SEPARATOR---" "${failed_scripts[@]}"
 }
 
 # Fungsi untuk menampilkan ringkasan eksekusi
 show_execution_summary() {
     local total_duration="$1"
-    local succeeded_count="$2"
-    shift 2
-    local succeeded_scripts=("${@:1:$succeeded_count}")
-    local failed_count="${@:$((succeeded_count+1)):1}"
-    local failed_scripts=("${@:$((succeeded_count+2)):$failed_count}")
+    shift
+    
+    # Pisahkan antara succeeded dan failed scripts
+    local succeeded_scripts=()
+    local failed_scripts=()
+    local parsing_succeeded=true
+    
+    for arg in "$@"; do
+        if [[ "$arg" == "---SEPARATOR---" ]]; then
+            parsing_succeeded=false
+            continue
+        fi
+        
+        if [[ "$parsing_succeeded" == true ]]; then
+            succeeded_scripts+=("$arg")
+        else
+            failed_scripts+=("$arg")
+        fi
+    done
     
     printf "\n\n"
     draw_line "═" 75
@@ -793,17 +807,17 @@ show_execution_summary() {
     
     printf "\n${C_BRIGHT_BLUE}${ICON_INFO} ${C_BOLD}Statistik Eksekusi:${C_RESET}\n"
     printf "  • Total waktu eksekusi: ${C_BOLD}%d detik${C_RESET}\n" "$total_duration"
-    printf "  • Skrip berhasil: ${C_BRIGHT_GREEN}${C_BOLD}%d${C_RESET}\n" "$succeeded_count"
-    printf "  • Skrip gagal: ${C_BRIGHT_RED}${C_BOLD}%d${C_RESET}\n" "$failed_count"
+    printf "  • Skrip berhasil: ${C_BRIGHT_GREEN}${C_BOLD}%d${C_RESET}\n" "${#succeeded_scripts[@]}"
+    printf "  • Skrip gagal: ${C_BRIGHT_RED}${C_BOLD}%d${C_RESET}\n" "${#failed_scripts[@]}"
     
-    if [[ $succeeded_count -gt 0 ]]; then
+    if [[ ${#succeeded_scripts[@]} -gt 0 ]]; then
         printf "\n${C_BRIGHT_GREEN}${ICON_SUCCESS} ${C_BOLD}Skrip Berhasil:${C_RESET}\n"
         for script in "${succeeded_scripts[@]}"; do
             printf "  ${C_BRIGHT_GREEN}✓${C_RESET} %s\n" "$script"
         done
     fi
     
-    if [[ $failed_count -gt 0 ]]; then
+    if [[ ${#failed_scripts[@]} -gt 0 ]]; then
         printf "\n${C_BRIGHT_RED}${ICON_ERROR} ${C_BOLD}Skrip Gagal:${C_RESET}\n"
         for script in "${failed_scripts[@]}"; do
             printf "  ${C_BRIGHT_RED}✗${C_RESET} %s\n" "$script"
@@ -812,7 +826,7 @@ show_execution_summary() {
     
     draw_line "═" 75
     
-    if [[ $failed_count -eq 0 ]]; then
+    if [[ ${#failed_scripts[@]} -eq 0 ]]; then
         log_success "Semua skrip berhasil dijalankan!"
     else
         log_warning "Beberapa skrip mengalami masalah saat eksekusi"
