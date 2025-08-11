@@ -102,9 +102,9 @@ log_error() {
 draw_line() {
     local char="${1:-─}"
     local width="${2:-75}"
-    printf "%s" "${C_DIM}"
+    printf "%b" "${C_DIM}"
     printf "%*s\n" "$width" "" | tr ' ' "$char"
-    printf "%s" "${C_RESET}"
+    printf "%b" "${C_RESET}"
 }
 
 show_header() {
