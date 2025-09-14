@@ -78,7 +78,7 @@ declare -r ICON_ALL="📦"
 # ====================================================================
 
 # Konfigurasi repository dan direktori
-REPO_URL="${MY_SCRIPT_REPO_URL:-https://github.com/localan/my-script}"
+REPO_URL="${MY_SCRIPT_REPO_URL:-https://github.com/podsni/my-script}"
 TARGET_DIR_DEFAULT="$HOME/my-script"
 TARGET_DIR="${MY_SCRIPT_DIR:-$TARGET_DIR_DEFAULT}"
 
