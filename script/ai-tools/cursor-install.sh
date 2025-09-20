@@ -44,6 +44,31 @@ fi
 echo ""
 echo "✅ Cursor AI Code Editor installation completed!"
 
+# Configure PATH automatically
+echo "🔧 Configuring PATH for Cursor Agent..."
+
+# Detect shell and set appropriate config file
+if [[ -n "${ZSH_VERSION:-}" ]]; then
+    SHELL_CONFIG="$HOME/.zshrc"
+    SHELL_NAME="zsh"
+else
+    SHELL_CONFIG="$HOME/.bashrc"
+    SHELL_NAME="bash"
+fi
+
+# Add ~/.local/bin to PATH if not already present
+PATH_EXPORT='export PATH="$HOME/.local/bin:$PATH"'
+if ! grep -q '\.local/bin' "$SHELL_CONFIG" 2>/dev/null; then
+    echo "📝 Adding ~/.local/bin to PATH in $SHELL_CONFIG"
+    echo "$PATH_EXPORT" >> "$SHELL_CONFIG"
+    echo "✅ PATH configuration added to $SHELL_CONFIG"
+else
+    echo "✅ PATH configuration already exists in $SHELL_CONFIG"
+fi
+
+# Add to current session PATH
+export PATH="$HOME/.local/bin:$PATH"
+
 # Try to verify installation
 echo "🔍 Verifying installation..."
 
@@ -84,26 +109,23 @@ if [[ "$CURSOR_FOUND" == false ]]; then
     echo "   Try running 'cursor' command or check your desktop applications"
 fi
 
+# Check for cursor-agent command
+echo "🤖 Checking for Cursor Agent..."
+if command -v cursor-agent &> /dev/null; then
+    echo "✅ Cursor Agent is accessible from command line"
+    if cursor-agent --version &> /dev/null; then
+        echo "✅ Cursor Agent version: $(cursor-agent --version)"
+    else
+        echo "⚠️  Cursor Agent installed but version check failed"
+    fi
+else
+    echo "⚠️  Cursor Agent not accessible from command line"
+    echo "   Make sure ~/.local/bin is in your PATH"
+fi
+
 # Check if cursor is available as a command
 if command -v cursor &> /dev/null; then
     echo "✅ Cursor is accessible from command line"
-    
-    # Detect shell and check appropriate config file
-    if [[ -n "${ZSH_VERSION:-}" ]]; then
-        SHELL_CONFIG="$HOME/.zshrc"
-        SHELL_NAME="zsh"
-    else
-        SHELL_CONFIG="$HOME/.bashrc"
-        SHELL_NAME="bash"
-    fi
-    
-    # Check if PATH is configured in shell config
-    if grep -q "cursor" "$SHELL_CONFIG" 2>/dev/null; then
-        echo "✅ PATH configuration found in $SHELL_CONFIG"
-    else
-        echo "⚠️  PATH not configured in $SHELL_CONFIG"
-        echo "   This is normal for GUI applications like Cursor"
-    fi
 else
     echo "⚠️  Cursor not accessible from command line"
     echo "   This is normal for GUI applications - check your applications menu"
@@ -111,7 +133,7 @@ fi
 
 echo ""
 echo "📋 Next steps:"
-echo "1. Refresh your shell session:"
+echo "1. Refresh your shell session to apply PATH changes:"
 if [[ -n "${ZSH_VERSION:-}" ]]; then
     echo "   source ~/.zshrc"
     echo "   # OR restart your terminal"
@@ -122,10 +144,17 @@ else
     echo "💡 Shell detected: bash"
 fi
 echo ""
-echo "2. Verify installation: cursor-agent --version"
-echo "3. Look for Cursor in your applications menu"
-echo "4. Launch Cursor from the desktop environment"
-echo "5. Sign in with your account to access AI features"
-echo "6. Start coding with AI assistance!"
+echo "2. Verify Cursor Agent installation:"
+echo "   cursor-agent --version"
+echo ""
+echo "3. Start using Cursor Agent:"
+echo "   cursor-agent"
+echo ""
+echo "4. For GUI application:"
+echo "   - Look for Cursor in your applications menu"
+echo "   - Launch Cursor from the desktop environment"
+echo "   - Sign in with your account to access AI features"
+echo ""
+echo "5. Start coding with AI assistance!"
 echo ""
 echo "🎉 Happy coding with Cursor AI!"
