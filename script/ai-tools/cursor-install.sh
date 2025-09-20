@@ -66,8 +66,27 @@ else
     echo "✅ PATH configuration already exists in $SHELL_CONFIG"
 fi
 
-# Add to current session PATH
+# Add to current session PATH immediately
 export PATH="$HOME/.local/bin:$PATH"
+
+# Also add to current shell's environment for immediate use
+if [[ -n "${ZSH_VERSION:-}" ]]; then
+    # For zsh - add to current session
+    export PATH="$HOME/.local/bin:$PATH"
+    # Also try to source the config if it exists
+    if [[ -f "$HOME/.zshrc" ]]; then
+        source "$HOME/.zshrc" 2>/dev/null || true
+    fi
+else
+    # For bash - add to current session
+    export PATH="$HOME/.local/bin:$PATH"
+    # Also try to source the config if it exists
+    if [[ -f "$HOME/.bashrc" ]]; then
+        source "$HOME/.bashrc" 2>/dev/null || true
+    fi
+fi
+
+echo "✅ PATH configured for immediate use in current session"
 
 # Try to verify installation
 echo "🔍 Verifying installation..."
@@ -115,12 +134,23 @@ if command -v cursor-agent &> /dev/null; then
     echo "✅ Cursor Agent is accessible from command line"
     if cursor-agent --version &> /dev/null; then
         echo "✅ Cursor Agent version: $(cursor-agent --version)"
+        echo "✅ Cursor Agent ready to use immediately!"
     else
         echo "⚠️  Cursor Agent installed but version check failed"
     fi
 else
     echo "⚠️  Cursor Agent not accessible from command line"
     echo "   Make sure ~/.local/bin is in your PATH"
+fi
+
+# Verify PATH is working immediately
+echo "🔍 Verifying immediate PATH availability..."
+if [[ ":$PATH:" == *":$HOME/.local/bin:"* ]]; then
+    echo "✅ ~/.local/bin is in current session PATH"
+    echo "✅ Commands should be available immediately"
+else
+    echo "⚠️  ~/.local/bin not found in current PATH"
+    echo "   You may need to restart your terminal or run: source $SHELL_CONFIG"
 fi
 
 # Check if cursor is available as a command
@@ -133,21 +163,13 @@ fi
 
 echo ""
 echo "📋 Next steps:"
-echo "1. Refresh your shell session to apply PATH changes:"
-if [[ -n "${ZSH_VERSION:-}" ]]; then
-    echo "   source ~/.zshrc"
-    echo "   # OR restart your terminal"
-    echo "💡 Shell detected: zsh"
-else
-    echo "   source ~/.bashrc"
-    echo "   # OR restart your terminal"
-    echo "💡 Shell detected: bash"
-fi
+echo "1. ✅ PATH already configured for immediate use!"
+echo "   Commands are available right now in this session"
 echo ""
-echo "2. Verify Cursor Agent installation:"
+echo "2. ✅ Verify Cursor Agent installation:"
 echo "   cursor-agent --version"
 echo ""
-echo "3. Start using Cursor Agent:"
+echo "3. ✅ Start using Cursor Agent immediately:"
 echo "   cursor-agent"
 echo ""
 echo "4. For GUI application:"
@@ -155,6 +177,15 @@ echo "   - Look for Cursor in your applications menu"
 echo "   - Launch Cursor from the desktop environment"
 echo "   - Sign in with your account to access AI features"
 echo ""
-echo "5. Start coding with AI assistance!"
+echo "5. For new terminal sessions:"
+if [[ -n "${ZSH_VERSION:-}" ]]; then
+    echo "   PATH is saved in ~/.zshrc for future sessions"
+    echo "💡 Shell detected: zsh"
+else
+    echo "   PATH is saved in ~/.bashrc for future sessions"
+    echo "💡 Shell detected: bash"
+fi
+echo ""
+echo "6. Start coding with AI assistance!"
 echo ""
 echo "🎉 Happy coding with Cursor AI!"
