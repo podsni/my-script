@@ -3,6 +3,8 @@
 # By Hendra 😎
 
 set -euo pipefail
+export OPAMYES=1
+export OPAMJOBS="${OPAMJOBS:-$(command -v nproc >/dev/null 2>&1 && nproc || echo 2)}"
 
 need_cmd() { command -v "$1" >/dev/null 2>&1; }
 as_root() {
@@ -37,12 +39,12 @@ detect_pkg_mgr() {
 install_deps() {
   log "Menginstall dependency dasar..."
   case "$PKG_MGR" in
-    pacman) as_root pacman -Sy --noconfirm curl m4 git unzip ;;
-    apt) as_root apt-get update -y && as_root apt-get install -y curl m4 git unzip bubblewrap ;;
-    dnf) as_root dnf install -y curl m4 git unzip ;;
-    yum) as_root yum install -y curl m4 git unzip ;;
-    zypper) as_root zypper --non-interactive install curl m4 git unzip ;;
-    apk) as_root apk add --no-cache curl m4 git unzip ;;
+    pacman) as_root pacman -Sy --noconfirm curl m4 git unzip base-devel ;; 
+    apt) as_root apt-get update -y && as_root apt-get install -y curl m4 git unzip bubblewrap build-essential pkg-config ;; 
+    dnf) as_root dnf install -y curl m4 git unzip gcc make patch pkgconfig ;; 
+    yum) as_root yum install -y curl m4 git unzip gcc make patch pkgconfig ;; 
+    zypper) as_root zypper --non-interactive install curl m4 git unzip gcc make patch pkg-config ;; 
+    apk) as_root apk add --no-cache curl m4 git unzip build-base ;; 
   esac
 }
 
@@ -59,7 +61,7 @@ install_opam() {
     dnf) as_root dnf install -y opam ;;
     yum) as_root yum install -y opam ;;
     zypper) as_root zypper --non-interactive install opam ;;
-    apk) 
+    apk)
       log "Membangun opam dari script resmi..."
       sh <(curl -fsSL https://raw.githubusercontent.com/ocaml/opam/master/shell/install.sh)
       ;;
@@ -70,19 +72,32 @@ install_opam() {
 install_ocaml() {
   if [ ! -d "$HOME/.opam" ]; then
     log "Inisialisasi opam..."
-    opam init -y --disable-sandboxing
+    opam init --disable-sandboxing
   fi
 
-  log "Memasang OCaml stable terbaru..."
-  opam switch create default ocaml-base-compiler.latest || true
+  log "Memperbarui repository opam..."
+  opam update
 
-  eval "$(opam env)"
+  CURRENT_SWITCH="$(opam switch show 2>/dev/null || echo default)"
+  if ! opam switch list --short | grep -qx "default"; then
+    log "Membuat switch default dengan compiler OCaml terbaru..."
+    opam switch create default ocaml-base-compiler.latest
+  else
+    log "Switch default sudah ada. Menggunakan switch default."
+  fi
+
+  eval "$(opam env --switch=default)"
 }
 
 # ---------- Setup PATH ----------
 setup_path() {
-  if ! grep -qs 'opam env' "$HOME/.bashrc" 2>/dev/null; then
+  # Tambahkan ke bashrc
+  if [ -f "$HOME/.bashrc" ] && ! grep -qs 'opam env' "$HOME/.bashrc" 2>/dev/null; then
     echo 'eval "$(opam env)"' >> "$HOME/.bashrc"
+  fi
+  # Tambahkan ke zshrc jika ada
+  if [ -f "$HOME/.zshrc" ] && ! grep -qs 'opam env' "$HOME/.zshrc" 2>/dev/null; then
+    echo 'eval "$(opam env)"' >> "$HOME/.zshrc"
   fi
 }
 
@@ -91,6 +106,7 @@ verify_ocaml() {
   log "Verifikasi instalasi:"
   ocaml -version
   opam --version
+  command -v ocamlc >/dev/null 2>&1 && ocamlc -version || true
 }
 
 # ---------- Main ----------

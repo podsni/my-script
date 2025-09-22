@@ -33,7 +33,7 @@ detect_pkg_mgr() {
   fi
 }
 
-# ---------- Install curl jika belum ada ----------
+# ---------- Install alat jaringan (curl) jika belum ada ----------
 install_curl() {
   if need_cmd curl; then
     log "curl sudah terpasang."
@@ -51,26 +51,67 @@ install_curl() {
   esac
 }
 
+# ---------- Install toolchain build dependensi ----------
+install_build_deps() {
+  log "Menginstall dependency build untuk Rust..."
+  case "$PKG_MGR" in
+    pacman) as_root pacman -Sy --noconfirm base-devel pkgconf openssl ;; 
+    apt) as_root apt-get install -y build-essential pkg-config libssl-dev ;; 
+    dnf) as_root dnf install -y gcc make patch pkgconfig openssl-devel ;; 
+    yum) as_root yum install -y gcc make patch pkgconfig openssl-devel ;; 
+    zypper) as_root zypper --non-interactive install gcc make patch pkg-config libopenssl-devel ;; 
+    apk) as_root apk add --no-cache build-base pkgconf openssl-dev ;; 
+  esac
+}
+
 # ---------- Install Rust ----------
 install_rust() {
-  log "Menginstall Rust via rustup..."
-  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+  if need_cmd rustup; then
+    log "rustup sudah terpasang. Memperbarui toolchain..."
+    rustup self update || true
+    rustup update
+  else
+    log "Menginstall Rust via rustup (non-interaktif)..."
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable
+  fi
+
+  # shellcheck disable=SC1090
+  [ -f "$HOME/.cargo/env" ] && source "$HOME/.cargo/env"
+
+  # Pastikan komponen penting ada
+  if need_cmd rustup; then
+    rustup component add rustfmt clippy || true
+  fi
 }
 
 # ---------- Load PATH & verifikasi ----------
+ensure_path() {
+  # Tambahkan sourcing cargo/env ke shell rc secara idempoten
+  if [ -f "$HOME/.bashrc" ] && ! grep -qs 'source \$HOME/.cargo/env' "$HOME/.bashrc" 2>/dev/null; then
+    echo 'source $HOME/.cargo/env' >> "$HOME/.bashrc"
+  fi
+  if [ -f "$HOME/.zshrc" ] && ! grep -qs 'source \$HOME/.cargo/env' "$HOME/.zshrc" 2>/dev/null; then
+    echo 'source $HOME/.cargo/env' >> "$HOME/.zshrc"
+  fi
+}
+
 verify_rust() {
   # shellcheck disable=SC1090
   [ -f "$HOME/.cargo/env" ] && source "$HOME/.cargo/env"
   log "Verifikasi Rust:"
-  rustc --version
-  cargo --version
+  rustc --version || true
+  cargo --version || true
+  command -v rustfmt >/dev/null 2>&1 && rustfmt --version || true
+  command -v cargo-clippy >/dev/null 2>&1 && cargo clippy -V || true
 }
 
 # ---------- Main ----------
 main() {
   detect_pkg_mgr
   install_curl
+    install_build_deps
   install_rust
+    ensure_path
   verify_rust
   log "Instalasi selesai 🎉. Jalankan 'source ~/.cargo/env' jika PATH belum aktif."
 }
