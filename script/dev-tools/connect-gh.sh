@@ -2,12 +2,12 @@
 
 # =======================================
 # SETUP SSH untuk GitHub.com langsung
-# Menggunakan kunci ~/.ssh/bitwarden_localan
+# Menggunakan kunci ~/.ssh/bitwarden_podsni
 # =======================================
 
-SSH_KEY="$HOME/.ssh/bitwarden_localan"
+SSH_KEY="$HOME/.ssh/bitwarden_podsni"
 GITHUB_HOST="github.com"
-GITHUB_USER="localan"
+GITHUB_USER="podsni"
 GITHUB_EMAIL="localso@proton.me"
 SSH_CONFIG_FILE="$HOME/.ssh/config"
 
@@ -26,7 +26,7 @@ if ! grep -q "Host $GITHUB_HOST" "$SSH_CONFIG_FILE"; then
   echo "[*] Menambahkan konfigurasi SSH ke github.com..."
   cat <<EOF >> "$SSH_CONFIG_FILE"
 
-# Gunakan kunci bitwarden_localan untuk github.com
+# Gunakan kunci bitwarden_podsni untuk github.com
 Host $GITHUB_HOST
   HostName github.com
   User git

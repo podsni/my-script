@@ -1,0 +1,102 @@
+---
+alwaysApply: true
+description: "Project structure and navigation guide for my-script repository"
+---
+
+# Project Structure Guide
+
+This is a comprehensive script management system called **HADES Script Manager** - an interactive installer and executor for managing collections of bash scripts.
+
+## Main Entry Points
+
+- **Main installer**: [install.sh](mdc:install.sh) - The primary entry point that provides an interactive menu system
+- **Backup utility**: [backups.sh](mdc:backups.sh) - Handles backup operations
+- **Test script**: [test.sh](mdc:test.sh) - Testing utilities
+
+## Script Organization
+
+All functional scripts are organized in the `script/` directory by category:
+
+### Core Categories
+- **vm-test/**: VPS security hardening, audits, and system checks
+  - [vps-sec-check.sh](mdc:script/vm-test/vps-sec-check.sh) - Comprehensive security audit (read-only)
+  - [vps-check.sh](mdc:script/vm-test/vps-check.sh) - VPS capability checks
+  - [harden-server.sh](mdc:script/vm-test/harden-server.sh) - Server hardening automation
+  - [ssh-config.sh](mdc:script/vm-test/ssh-config.sh) - SSH configuration management
+
+- **dev-env/**: Development environment setup
+  - **Javascript/**: Node.js, Bun, Deno installers
+    - [bun.sh](mdc:script/dev-env/Javascript/bun.sh) - Bun runtime installer
+    - [nodejs.sh](mdc:script/dev-env/Javascript/nodejs.sh) - Node.js installer
+    - [deno.sh](mdc:script/dev-env/Javascript/deno.sh) - Deno installer
+  - [rust.sh](mdc:script/dev-env/rust.sh) - Rust toolchain installer
+  - [golang.sh](mdc:script/dev-env/golang.sh) - Go language installer
+  - [docker.sh](mdc:script/dev-env/docker.sh) - Docker installation
+
+- **dev-tools/**: Development tools and utilities
+  - [tmux-install.sh](mdc:script/dev-tools/tmux-install.sh) - Tmux terminal multiplexer
+  - [docker-install.sh](mdc:script/dev-tools/docker-install.sh) - Docker installation
+  - [install-dev-tools.sh](mdc:script/dev-tools/install-dev-tools.sh) - Comprehensive dev tools installer
+
+- **ai-tools/**: AI development tools
+  - [cursor-install.sh](mdc:script/ai-tools/cursor-install.sh) - Cursor IDE installer
+  - [install-all-ai-tools.sh](mdc:script/ai-tools/install-all-ai-tools.sh) - Bulk AI tools installer
+
+- **jaringan/**: Network configuration and utilities
+  - [set-static-ip.sh](mdc:script/jaringan/set-static-ip.sh) - Static IP configuration
+  - [cek-port.sh](mdc:script/jaringan/cek-port.sh) - Port checking utilities
+  - [info-jaringan.sh](mdc:script/jaringan/info-jaringan.sh) - Network information
+
+- **setupOS/**: Operating system setup scripts
+  - [omarchy.sh](mdc:script/setupOS/omarchy.sh) - Arch Linux setup
+  - [omakub.sh](mdc:script/setupOS/omakub.sh) - Ubuntu setup
+
+## Key Features
+
+### Interactive Menu System
+The [install.sh](mdc:install.sh) provides:
+- Category-based script selection
+- Multiple script execution
+- Random script selection
+- Confirmation dialogs
+- Error handling and recovery
+
+### Script Execution Model
+- **Bootstrap**: Auto-clones repository if run via curl
+- **Local mode**: Runs scripts from local repository
+- **Safety**: Checks for sudo requirements before execution
+- **Logging**: Comprehensive execution logging and summaries
+
+### Environment Variables
+- `MY_SCRIPT_REPO_URL`: Repository URL (default: https://github.com/podsni/my-script)
+- `MY_SCRIPT_DIR`: Local installation directory (default: $HOME/my-script)
+
+## Usage Patterns
+
+### One-liner Installation
+```bash
+bash <(curl -L link.dwx.my.id/my-script)
+```
+
+### Local Development
+```bash
+cd "$HOME/my-script"
+./install.sh
+```
+
+### Custom Configuration
+```bash
+MY_SCRIPT_DIR="/opt/my-script" \
+MY_SCRIPT_REPO_URL="https://github.com/custom/my-script" \
+bash <(curl -L link.dwx.my.id/my-script)
+```
+
+## Script Standards
+
+All scripts follow these conventions:
+- Use `#!/usr/bin/env bash` shebang
+- Implement `set -euo pipefail` for strict error handling
+- Include descriptive comments and usage information
+- Support `--help` flags where applicable
+- Use consistent logging functions (log_info, log_success, log_error, log_warning)
+- Follow the color coding system defined in [install.sh](mdc:install.sh)

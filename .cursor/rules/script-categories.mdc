@@ -1,0 +1,294 @@
+---
+alwaysApply: true
+description: "Script categories organization and management guidelines"
+---
+
+# Script Categories and Organization Guidelines
+
+This rule defines the organization structure, naming conventions, and management practices for scripts across all categories in the my-script repository.
+
+## Category Structure
+
+### Primary Categories
+
+#### vm-test/ - VPS Security and Testing
+**Purpose**: VPS security hardening, audits, and system validation
+**Scripts**:
+- [vps-sec-check.sh](mdc:script/vm-test/vps-sec-check.sh) - Comprehensive security audit
+- [vps-check.sh](mdc:script/vm-test/vps-check.sh) - VPS capability validation
+- [harden-server.sh](mdc:script/vm-test/harden-server.sh) - Automated server hardening
+- [ssh-config.sh](mdc:script/vm-test/ssh-config.sh) - SSH configuration management
+- [aktif-otp.sh](mdc:script/vm-test/aktif-otp.sh) - OTP activation utilities
+
+**Standards**:
+- All scripts must be read-only by default
+- Support `--all`, `--no-color`, `--help` flags
+- Never modify system without explicit confirmation
+- Provide comprehensive audit reports
+
+#### dev-env/ - Development Environment Setup
+**Purpose**: Development toolchain and environment configuration
+**Subcategories**:
+- **Javascript/**: JavaScript runtime environments
+  - [bun.sh](mdc:script/dev-env/Javascript/bun.sh) - Bun runtime installer
+  - [nodejs.sh](mdc:script/dev-env/Javascript/nodejs.sh) - Node.js installer
+  - [deno.sh](mdc:script/dev-env/Javascript/deno.sh) - Deno installer
+- **System Languages**: Core programming languages
+  - [rust.sh](mdc:script/dev-env/rust.sh) - Rust toolchain
+  - [golang.sh](mdc:script/dev-env/golang.sh) - Go language
+  - [miniconda.sh](mdc:script/dev-env/miniconda.sh) - Python environment
+  - [docker.sh](mdc:script/dev-env/docker.sh) - Container platform
+
+**Standards**:
+- Support multiple Linux distributions
+- Non-interactive installation with `DEBIAN_FRONTEND=noninteractive`
+- Verify installations post-setup
+- Configure PATH and environment variables
+
+#### dev-tools/ - Development Tools and Utilities
+**Purpose**: Essential development tools and productivity utilities
+**Scripts**:
+- [tmux-install.sh](mdc:script/dev-tools/tmux-install.sh) - Terminal multiplexer
+- [docker-install.sh](mdc:script/dev-tools/docker-install.sh) - Docker installation
+- [install-dev-tools.sh](mdc:script/dev-tools/install-dev-tools.sh) - Bulk tool installer
+- [zsh-tmux.sh](mdc:script/dev-tools/zsh-tmux.sh) - Shell configuration
+- [connect-gh.sh](mdc:script/dev-tools/connect-gh.sh) - GitHub integration
+
+**Standards**:
+- Focus on productivity and workflow optimization
+- Minimal dependencies and resource usage
+- Cross-platform compatibility where possible
+
+#### ai-tools/ - AI Development Tools
+**Purpose**: AI-powered development tools and IDE integrations
+**Scripts**:
+- [cursor-install.sh](mdc:script/ai-tools/cursor-install.sh) - Cursor IDE installer
+- [install-all-ai-tools.sh](mdc:script/ai-tools/install-all-ai-tools.sh) - Bulk AI tools
+- [test-all-ai-tools.sh](mdc:script/ai-tools/test-all-ai-tools.sh) - AI tools testing
+- [opencode.sh](mdc:script/ai-tools/opencode.sh) - OpenCode integration
+- [qwen-install.sh](mdc:script/ai-tools/qwen-install.sh) - Qwen model setup
+- [gemini-install.sh](mdc:script/ai-tools/gemini-install.sh) - Gemini integration
+
+**Standards**:
+- Support latest AI tool versions
+- Handle API key configuration securely
+- Provide testing and validation utilities
+
+#### jaringan/ - Network Configuration
+**Purpose**: Network setup, configuration, and troubleshooting
+**Scripts**:
+- [set-static-ip.sh](mdc:script/jaringan/set-static-ip.sh) - Static IP configuration
+- [cek-port.sh](mdc:script/jaringan/cek-port.sh) - Port checking utilities
+- [info-jaringan.sh](mdc:script/jaringan/info-jaringan.sh) - Network information
+- [mac-address.sh](mdc:script/jaringan/mac-address.sh) - MAC address management
+- [set-hostname.sh](mdc:script/jaringan/set-hostname.sh) - Hostname configuration
+- [setup_sudo_nopasswd.sh](mdc:script/jaringan/setup_sudo_nopasswd.sh) - Sudo configuration
+
+**Standards**:
+- Validate network configurations before applying
+- Provide rollback procedures
+- Support dry-run mode for testing
+
+#### setupOS/ - Operating System Setup
+**Purpose**: OS-specific installation and configuration
+**Scripts**:
+- [omarchy.sh](mdc:script/setupOS/omarchy.sh) - Arch Linux setup
+- [omakub.sh](mdc:script/setupOS/omakub.sh) - Ubuntu setup
+
+**Standards**:
+- OS-specific optimizations and configurations
+- Handle package manager differences
+- Configure system services and daemons
+
+#### Programming-Lang/ - Programming Language Installers
+**Purpose**: Duplicate of dev-env/ for backward compatibility
+**Note**: This category mirrors dev-env/ structure and should be gradually deprecated
+
+#### git-tools/ - Git and Version Control
+**Purpose**: Git configuration and GitHub integration
+**Scripts**:
+- [git-config.sh](mdc:script/git-tools/git-config.sh) - Git configuration
+- [ghup-install.sh](mdc:script/git-tools/ghup-install.sh) - GitHub CLI installer
+
+#### password-generator/ - Security Utilities
+**Purpose**: Password generation and security utilities
+**Scripts**:
+- [pass-generator.sh](mdc:script/password-generator/pass-generator.sh) - Password generator
+
+## Naming Conventions
+
+### Script Naming Standards
+- Use lowercase with hyphens: `script-name.sh`
+- Be descriptive and specific: `vps-sec-check.sh` not `check.sh`
+- Include category context: `docker-install.sh` not `install.sh`
+- Use action verbs: `install-`, `setup-`, `configure-`, `check-`
+
+### Directory Naming
+- Use lowercase with hyphens: `dev-env/`, `ai-tools/`
+- Be concise but clear: `jaringan/` (network), `vm-test/` (VPS testing)
+- Avoid abbreviations unless commonly understood
+
+## Script Organization Principles
+
+### Single Responsibility
+Each script should have one clear purpose:
+```bash
+# Good: Single purpose
+vps-sec-check.sh    # Security audit only
+docker-install.sh   # Docker installation only
+
+# Avoid: Multiple purposes
+setup-everything.sh # Too broad
+```
+
+### Dependency Management
+Scripts should declare and handle dependencies:
+```bash
+# Check prerequisites
+check_prerequisites() {
+    need_cmd curl
+    need_cmd git
+    need_cmd sudo
+}
+
+# Install missing dependencies
+install_dependencies() {
+    if ! command -v curl >/dev/null 2>&1; then
+        install_package curl
+    fi
+}
+```
+
+### Error Handling Hierarchy
+```bash
+# Level 1: Script-level errors
+set -euo pipefail
+
+# Level 2: Function-level errors
+install_tool() {
+    local tool="$1"
+    if ! install_package "$tool"; then
+        log_error "Failed to install $tool"
+        return 1
+    fi
+}
+
+# Level 3: User-level errors
+if ! install_tool "docker"; then
+    log_error "Cannot proceed without Docker"
+    exit 1
+fi
+```
+
+## Category-Specific Guidelines
+
+### Security Scripts (vm-test/)
+- **Safety First**: Never modify without explicit user confirmation
+- **Audit Focus**: Provide comprehensive system analysis
+- **Non-Intrusive**: Default to read-only operations
+- **Verification**: Include post-hardening verification steps
+
+### Development Scripts (dev-env/, dev-tools/)
+- **Multi-Platform**: Support Ubuntu, Debian, Fedora, Arch, Alpine
+- **Non-Interactive**: Use `DEBIAN_FRONTEND=noninteractive`
+- **Verification**: Test installations after completion
+- **Environment**: Configure PATH and environment variables
+
+### Network Scripts (jaringan/)
+- **Validation**: Test configurations before applying
+- **Rollback**: Provide undo procedures
+- **Dry Run**: Support `--dry-run` mode
+- **Documentation**: Include network topology considerations
+
+### AI Tools (ai-tools/)
+- **API Keys**: Handle credentials securely
+- **Version Management**: Support latest tool versions
+- **Testing**: Include validation and testing utilities
+- **Integration**: Provide IDE and editor integration
+
+## Integration with HADES Manager
+
+### Script Discovery
+The installer automatically discovers scripts based on:
+- Location in `script/` directory structure
+- `.sh` file extension
+- Executable permissions (`chmod +x`)
+
+### Metadata Extraction
+Scripts should include metadata in comments:
+```bash
+#!/usr/bin/env bash
+# Install Bun JavaScript runtime
+# By Hendra 😎
+# 
+# Description: Installs Bun runtime with pnpm package manager
+# Prerequisites: curl, bash
+# Usage: ./bun.sh [--help]
+```
+
+### Category Statistics
+The installer provides category statistics:
+- Total scripts per category
+- Root-level scripts count
+- Category-specific metrics
+
+## Maintenance and Updates
+
+### Version Control
+- Use semantic versioning for major script updates
+- Document breaking changes in commit messages
+- Maintain backward compatibility where possible
+
+### Testing Strategy
+```bash
+# Test script functionality
+test_script() {
+    local script="$1"
+    
+    # Syntax check
+    bash -n "$script" || {
+        log_error "Syntax error in $script"
+        return 1
+    }
+    
+    # Dry run test
+    if [[ "$script" =~ (install|setup|configure) ]]; then
+        bash "$script" --dry-run || {
+            log_error "Dry run failed for $script"
+            return 1
+        }
+    fi
+}
+```
+
+### Documentation Updates
+- Update README.md when adding new categories
+- Maintain script descriptions in comments
+- Document new features and options
+
+## Quality Assurance
+
+### Code Review Checklist
+- [ ] Follows naming conventions
+- [ ] Includes proper error handling
+- [ ] Has comprehensive help documentation
+- [ ] Supports required command-line flags
+- [ ] Includes verification steps
+- [ ] Handles edge cases appropriately
+- [ ] Uses consistent logging functions
+- [ ] Follows security best practices
+
+### Performance Considerations
+- Minimize resource usage
+- Use efficient algorithms and commands
+- Avoid unnecessary network calls
+- Cache results where appropriate
+- Provide progress indicators for long operations
+
+### Security Considerations
+- Validate all inputs
+- Use least privilege principle
+- Avoid hardcoded credentials
+- Sanitize user inputs
+- Follow secure coding practices
+- Document security implications

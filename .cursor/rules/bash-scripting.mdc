@@ -1,0 +1,281 @@
+---
+globs: *.sh
+description: "Bash scripting standards and conventions for my-script repository"
+---
+
+# Bash Scripting Standards
+
+All bash scripts in this repository must follow these standards for consistency, safety, and maintainability.
+
+## Required Headers and Structure
+
+### Shebang and Safety
+```bash
+#!/usr/bin/env bash
+# Script description and purpose
+# By Author Name
+
+set -euo pipefail
+```
+
+### Standard Functions
+Use these utility functions from [install.sh](mdc:install.sh):
+
+```bash
+# Color definitions (if needed)
+declare -r C_RESET='\033[0m'
+declare -r C_BOLD='\033[1m'
+declare -r C_RED='\033[0;31m'
+declare -r C_GREEN='\033[0;32m'
+declare -r C_YELLOW='\033[0;33m'
+declare -r C_BLUE='\033[0;34m'
+
+# Logging functions
+log_info() {
+    printf "${C_BLUE}ℹ️ %s${C_RESET}\n" "$*"
+}
+
+log_success() {
+    printf "${C_GREEN}✅ %s${C_RESET}\n" "$*"
+}
+
+log_warning() {
+    printf "${C_YELLOW}⚠️ %s${C_RESET}\n" "$*"
+}
+
+log_error() {
+    printf "${C_RED}❌ %s${C_RESET}\n" "$*"
+}
+```
+
+## Script Categories and Requirements
+
+### Security Scripts (vm-test/)
+- Must be **read-only by default**
+- Use `--install` flag for optional utility installation
+- Support `--no-color` for automation
+- Include comprehensive help with `--help` flag
+- Example: [vps-sec-check.sh](mdc:script/vm-test/vps-sec-check.sh)
+
+### Installation Scripts (dev-env/, dev-tools/)
+- Support non-interactive installation with `DEBIAN_FRONTEND=noninteractive`
+- Detect package managers automatically (apt, dnf, pacman, etc.)
+- Create backups before making changes
+- Verify installations after completion
+- Example: [bun.sh](mdc:script/dev-env/Javascript/bun.sh)
+
+### Network Scripts (jaringan/)
+- Validate inputs before making changes
+- Test configurations before applying
+- Provide rollback instructions
+- Support dry-run mode where applicable
+
+## Error Handling Standards
+
+### Required Error Handling
+```bash
+# Always use strict mode
+set -euo pipefail
+
+# Check for required commands
+need_cmd() { 
+    command -v "$1" >/dev/null 2>&1 || {
+        log_error "Required command '$1' not found"
+        exit 1
+    }
+}
+
+# Handle sudo requirements
+as_root() {
+    if [ "${EUID:-$(id -u)}" -ne 0 ]; then
+        if need_cmd sudo; then 
+            sudo "$@"
+        else
+            log_error "Root access required. Install sudo or run as root."
+            exit 1
+        fi
+    else
+        "$@"
+    fi
+}
+```
+
+### Backup Strategy
+```bash
+# Create timestamped backups
+backup_file() {
+    local file="$1"
+    local backup="${file}.$(date +%F-%H%M%S).bak"
+    cp -a "$file" "$backup"
+    log_info "Backup created: $backup"
+}
+```
+
+## Command Line Interface Standards
+
+### Argument Parsing
+```bash
+# Standard argument parsing pattern
+ALLOW_INSTALL=0
+DO_ALL=0
+NO_COLOR=0
+
+for arg in "$@"; do
+    case "$arg" in
+        --all|-a) DO_ALL=1 ;;
+        --install) ALLOW_INSTALL=1 ;;
+        --no-color) NO_COLOR=1 ;;
+        --help|-h)
+            sed -n '2,20p' "$0"
+            exit 0
+            ;;
+        *) log_warning "Unknown option: $arg" ;;
+    esac
+done
+```
+
+### Help Documentation
+Every script must include help documentation:
+```bash
+# Usage: script-name [options]
+# Options:
+#   --all | -a        : Run all checks/operations
+#   --install         : Install optional dependencies
+#   --no-color        : Disable colored output
+#   --help | -h       : Show this help
+```
+
+## Package Manager Detection
+
+Use this standard pattern for multi-distro support:
+```bash
+detect_pkg_mgr() {
+    if need_cmd pacman; then PKG_MGR="pacman"
+    elif need_cmd apt-get; then PKG_MGR="apt"
+    elif need_cmd dnf; then PKG_MGR="dnf"
+    elif need_cmd yum; then PKG_MGR="yum"
+    elif need_cmd zypper; then PKG_MGR="zypper"
+    elif need_cmd apk; then PKG_MGR="apk"
+    else
+        log_error "No supported package manager found"
+        exit 1
+    fi
+}
+```
+
+## Installation Patterns
+
+### Non-interactive Installation
+```bash
+install_package() {
+    local pkg="$1"
+    case "$PKG_MGR" in
+        apt) as_root DEBIAN_FRONTEND=noninteractive apt-get install -y "$pkg" ;;
+        dnf) as_root dnf install -y "$pkg" ;;
+        pacman) as_root pacman -S --noconfirm "$pkg" ;;
+        *) log_error "Unsupported package manager: $PKG_MGR" ;;
+    esac
+}
+```
+
+### Verification
+```bash
+verify_installation() {
+    local cmd="$1"
+    local expected="$2"
+    
+    if command -v "$cmd" >/dev/null 2>&1; then
+        local version=$($cmd --version 2>/dev/null | head -n1 || echo "unknown")
+        log_success "$cmd installed: $version"
+        return 0
+    else
+        log_error "$cmd installation failed"
+        return 1
+    fi
+}
+```
+
+## Security Considerations
+
+### Sudo Requirements
+Scripts that need root access should:
+1. Check for sudo requirements early
+2. Request sudo access only when needed
+3. Use least-privilege principle
+4. Document why root access is required
+
+### Input Validation
+```bash
+validate_input() {
+    local input="$1"
+    local pattern="$2"
+    
+    if [[ ! "$input" =~ $pattern ]]; then
+        log_error "Invalid input: $input"
+        return 1
+    fi
+}
+```
+
+## Documentation Requirements
+
+### Script Headers
+Every script must include:
+- Purpose and description
+- Author information
+- Usage examples
+- Prerequisites
+- Known limitations
+
+### Inline Comments
+- Explain complex logic
+- Document non-obvious commands
+- Include references to external documentation
+- Mark TODO items clearly
+
+## Testing and Validation
+
+### Pre-execution Checks
+```bash
+# Verify system requirements
+check_requirements() {
+    need_cmd curl
+    need_cmd git
+    # Add other requirements as needed
+}
+```
+
+### Post-installation Verification
+```bash
+# Test installation
+test_installation() {
+    if command -v "$INSTALLED_TOOL" >/dev/null 2>&1; then
+        log_success "Installation verified"
+        return 0
+    else
+        log_error "Installation verification failed"
+        return 1
+    fi
+}
+```
+
+## Integration with HADES Manager
+
+### Script Discovery
+Scripts are automatically discovered by the installer based on:
+- Location in `script/` directory structure
+- `.sh` extension
+- Executable permissions
+
+### Metadata Extraction
+The installer extracts descriptions from script comments:
+```bash
+# This is a script description that will be shown in the menu
+```
+
+### Execution Context
+Scripts run with:
+- Current working directory set to script location
+- Environment variables preserved
+- Output captured and logged
+- Error handling integrated with main installer

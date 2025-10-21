@@ -3,9 +3,9 @@
 # ---------------------------
 # Konfigurasi pengguna
 # ---------------------------
-SSH_KEY="$HOME/.ssh/bitwarden_localan"
-SSH_ALIAS="github-localan"
-GITHUB_USER="localan"
+SSH_KEY="$HOME/.ssh/bitwarden_podsni"
+SSH_ALIAS="github-podsni"
+GITHUB_USER="podsni"
 GITHUB_EMAIL="localso@proton.me"
 SSH_CONFIG_FILE="$HOME/.ssh/config"
 
@@ -58,7 +58,7 @@ echo "[*] Konfigurasi Git saat ini:"
 git config --global --list
 
 echo ""
-echo "í¾‰ Setup selesai!"
-echo "í±‰ Gunakan ini untuk clone repo:"
+echo "ï¿½ï¿½ï¿½ Setup selesai!"
+echo "ï¿½ï¿½ï¿½ Gunakan ini untuk clone repo:"
 echo "    git clone git@$SSH_ALIAS:$GITHUB_USER/<repo>.git"
 

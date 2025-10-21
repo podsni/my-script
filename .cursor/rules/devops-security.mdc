@@ -1,0 +1,372 @@
+---
+globs: script/vm-test/*.sh
+description: "DevOps and security hardening guidelines for VPS management"
+---
+
+# DevOps and Security Hardening Guidelines
+
+This rule covers security hardening, VPS management, and DevOps practices for the vm-test script category.
+
+## Security Audit Scripts
+
+### Read-Only Security Audits
+Security audit scripts like [vps-sec-check.sh](mdc:script/vm-test/vps-sec-check.sh) must be:
+- **Non-intrusive**: Never modify system configuration
+- **Comprehensive**: Check all major security vectors
+- **Automated**: Support `--all` flag for complete audits
+- **Colored output**: Support `--no-color` for automation
+
+### Standard Security Checks
+```bash
+# System information
+check_system_info() {
+    log_info "System Information"
+    echo "OS: $(lsb_release -d 2>/dev/null || uname -a)"
+    echo "Kernel: $(uname -r)"
+    echo "Architecture: $(uname -m)"
+}
+
+# SSH configuration audit
+audit_ssh_config() {
+    log_info "SSH Configuration Audit"
+    if [[ -f /etc/ssh/sshd_config ]]; then
+        grep -E "^(PermitRootLogin|PasswordAuthentication|MaxAuthTries|X11Forwarding)" /etc/ssh/sshd_config
+    fi
+}
+
+# Firewall status
+check_firewall() {
+    log_info "Firewall Status"
+    if command -v ufw >/dev/null 2>&1; then
+        ufw status verbose
+    elif command -v iptables >/dev/null 2>&1; then
+        iptables -L -n
+    fi
+}
+```
+
+## Server Hardening Automation
+
+### Automated Hardening Process
+The [harden-server.sh](mdc:script/vm-test/harden-server.sh) script should implement:
+
+1. **System Updates**
+```bash
+harden_system_updates() {
+    log_info "Enabling automatic security updates"
+    as_root DEBIAN_FRONTEND=noninteractive apt-get update -y
+    as_root DEBIAN_FRONTEND=noninteractive apt-get install -y unattended-upgrades
+    
+    # Configure unattended upgrades
+    cat > /etc/apt/apt.conf.d/20auto-upgrades << EOF
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";
+Unattended-Upgrade::Automatic-Reboot "true";
+Unattended-Upgrade::Automatic-Reboot-Time "03:30";
+EOF
+    
+    as_root dpkg-reconfigure -f noninteractive unattended-upgrades
+}
+```
+
+2. **Firewall Configuration**
+```bash
+setup_firewall() {
+    log_info "Configuring UFW firewall"
+    as_root DEBIAN_FRONTEND=noninteractive apt-get install -y ufw
+    
+    # Default policies
+    as_root ufw default deny incoming
+    as_root ufw default allow outgoing
+    
+    # Essential services
+    as_root ufw allow OpenSSH
+    as_root ufw allow 80,443/tcp
+    
+    # Enable firewall
+    echo "y" | as_root ufw enable
+}
+```
+
+3. **SSH Hardening**
+```bash
+harden_ssh() {
+    log_info "Hardening SSH configuration"
+    
+    # Backup original config
+    backup_file /etc/ssh/sshd_config
+    
+    # Apply security settings
+    cat >> /etc/ssh/sshd_config << EOF
+
+# Security hardening
+PermitRootLogin no
+PasswordAuthentication no
+MaxAuthTries 4
+X11Forwarding no
+ClientAliveInterval 300
+ClientAliveCountMax 2
+EOF
+    
+    # Test configuration
+    as_root sshd -t || {
+        log_error "SSH configuration test failed"
+        return 1
+    }
+    
+    # Restart SSH service
+    as_root systemctl restart sshd || as_root systemctl restart ssh
+}
+```
+
+4. **Fail2ban Setup**
+```bash
+setup_fail2ban() {
+    log_info "Installing and configuring Fail2ban"
+    as_root DEBIAN_FRONTEND=noninteractive apt-get install -y fail2ban
+    
+    # Create jail configuration
+    cat > /etc/fail2ban/jail.local << EOF
+[sshd]
+enabled = true
+port = ssh
+filter = sshd
+maxretry = 5
+findtime = 10m
+bantime = 1h
+EOF
+    
+    as_root systemctl enable --now fail2ban
+}
+```
+
+5. **Kernel Hardening**
+```bash
+harden_kernel() {
+    log_info "Applying kernel security parameters"
+    
+    cat > /etc/sysctl.d/99-security.conf << EOF
+# Network security
+net.ipv4.ip_forward=0
+net.ipv4.conf.all.accept_source_route=0
+net.ipv4.conf.all.send_redirects=0
+net.ipv4.icmp_echo_ignore_broadcasts=1
+net.ipv4.tcp_syncookies=1
+net.ipv4.conf.all.rp_filter=1
+
+# IPv6 security (for servers)
+net.ipv6.conf.all.accept_ra=0
+net.ipv6.conf.default.accept_ra=0
+
+# Memory protection
+kernel.dmesg_restrict=1
+kernel.kptr_restrict=2
+EOF
+    
+    as_root sysctl --system
+}
+```
+
+## VPS Capability Checks
+
+### System Resource Monitoring
+The [vps-check.sh](mdc:script/vm-test/vps-check.sh) should verify:
+
+```bash
+check_system_resources() {
+    log_info "System Resource Check"
+    
+    # CPU information
+    echo "CPU: $(nproc) cores"
+    echo "CPU Model: $(grep 'model name' /proc/cpuinfo | head -n1 | cut -d: -f2 | xargs)"
+    
+    # Memory
+    echo "Memory: $(free -h | grep '^Mem:' | awk '{print $2}')"
+    echo "Swap: $(free -h | grep '^Swap:' | awk '{print $2}')"
+    
+    # Disk space
+    echo "Disk Usage:"
+    df -h | grep -E '^/dev/'
+    
+    # Load average
+    echo "Load Average: $(uptime | awk -F'load average:' '{print $2}')"
+}
+
+check_network_connectivity() {
+    log_info "Network Connectivity Check"
+    
+    # Test DNS resolution
+    if nslookup google.com >/dev/null 2>&1; then
+        log_success "DNS resolution working"
+    else
+        log_error "DNS resolution failed"
+    fi
+    
+    # Test internet connectivity
+    if ping -c 1 8.8.8.8 >/dev/null 2>&1; then
+        log_success "Internet connectivity working"
+    else
+        log_error "Internet connectivity failed"
+    fi
+}
+```
+
+## Application Stack Deployment
+
+### Node.js/Bun Stack
+```bash
+deploy_node_stack() {
+    local app_name="$1"
+    local app_path="$2"
+    local user="$3"
+    
+    # Install Bun (preferred) or Node.js
+    if ! command -v bun >/dev/null 2>&1; then
+        curl -fsSL https://bun.sh/install | bash
+        export PATH="$HOME/.bun/bin:$PATH"
+    fi
+    
+    # Create systemd service
+    cat > "/etc/systemd/system/${app_name}.service" << EOF
+[Unit]
+Description=${app_name} service
+After=network.target
+
+[Service]
+Type=simple
+User=${user}
+Group=${user}
+WorkingDirectory=${app_path}
+Environment=NODE_ENV=production
+ExecStart=bun run start
+Restart=always
+RestartSec=2
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    
+    as_root systemctl daemon-reload
+    as_root systemctl enable "${app_name}"
+}
+```
+
+### Python Stack
+```bash
+deploy_python_stack() {
+    local app_name="$1"
+    local app_path="$2"
+    local user="$3"
+    
+    # Create virtual environment
+    as_root -u "$user" python3 -m venv "${app_path}/venv"
+    as_root -u "$user" "${app_path}/venv/bin/pip" install -r "${app_path}/requirements.txt"
+    
+    # Create systemd service
+    cat > "/etc/systemd/system/${app_name}.service" << EOF
+[Unit]
+Description=${app_name} service
+After=network.target
+
+[Service]
+Type=simple
+User=${user}
+Group=${user}
+WorkingDirectory=${app_path}
+Environment=PATH=${app_path}/venv/bin
+ExecStart=${app_path}/venv/bin/python app.py
+Restart=always
+RestartSec=2
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+EOF
+}
+```
+
+## Monitoring and Observability
+
+### Log Management
+```bash
+setup_log_rotation() {
+    log_info "Setting up log rotation"
+    
+    cat > /etc/logrotate.d/app-logs << EOF
+/var/log/app/*.log {
+    daily
+    missingok
+    rotate 7
+    compress
+    delaycompress
+    notifempty
+    create 644 app app
+}
+EOF
+}
+```
+
+### Health Checks
+```bash
+create_health_check() {
+    local app_name="$1"
+    local port="$2"
+    
+    cat > "/usr/local/bin/${app_name}-health.sh" << EOF
+#!/bin/bash
+# Health check for ${app_name}
+
+if curl -f http://localhost:${port}/health >/dev/null 2>&1; then
+    echo "OK"
+    exit 0
+else
+    echo "FAIL"
+    exit 1
+fi
+EOF
+    
+    chmod +x "/usr/local/bin/${app_name}-health.sh"
+}
+```
+
+## Verification Commands
+
+After any hardening or deployment, provide these verification commands:
+
+```bash
+# Security verification
+verify_security() {
+    log_info "Security Verification Commands"
+    echo "Check firewall: sudo ufw status verbose"
+    echo "Check SSH config: sudo sshd -t"
+    echo "Check fail2ban: sudo fail2ban-client status"
+    echo "Check system logs: sudo journalctl -f"
+}
+
+# Service verification
+verify_services() {
+    local service="$1"
+    log_info "Service Verification Commands"
+    echo "Check status: sudo systemctl status ${service}"
+    echo "Check logs: sudo journalctl -u ${service} -n 100"
+    echo "Check health: /usr/local/bin/${service}-health.sh"
+}
+```
+
+## Safety Principles
+
+1. **Always backup before changes**
+2. **Test configurations before applying**
+3. **Use non-interactive flags for automation**
+4. **Provide rollback instructions**
+5. **Verify changes after implementation**
+6. **Document all modifications**
+7. **Use least privilege principle**
+8. **Implement proper error handling**

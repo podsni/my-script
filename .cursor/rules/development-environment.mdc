@@ -1,0 +1,478 @@
+---
+globs: script/dev-env/*.sh,script/Programming-Lang/*.sh
+description: "Development environment setup and programming language installation guidelines"
+---
+
+# Development Environment Setup Guidelines
+
+This rule covers development environment setup, programming language installations, and toolchain management for the dev-env and Programming-Lang script categories.
+
+## Language Installation Standards
+
+### Multi-Distribution Support
+All language installers must support multiple Linux distributions:
+
+```bash
+detect_distro() {
+    if [[ -f /etc/os-release ]]; then
+        . /etc/os-release
+        DISTRO="$ID"
+        VERSION="$VERSION_ID"
+    elif [[ -f /etc/redhat-release ]]; then
+        DISTRO="rhel"
+    elif [[ -f /etc/debian_version ]]; then
+        DISTRO="debian"
+    else
+        DISTRO="unknown"
+    fi
+}
+
+install_dependencies() {
+    case "$DISTRO" in
+        ubuntu|debian)
+            as_root DEBIAN_FRONTEND=noninteractive apt-get update
+            as_root DEBIAN_FRONTEND=noninteractive apt-get install -y "$@"
+            ;;
+        fedora|rhel|centos)
+            as_root dnf install -y "$@" 2>/dev/null || as_root yum install -y "$@"
+            ;;
+        arch|manjaro)
+            as_root pacman -S --noconfirm "$@"
+            ;;
+        opensuse*)
+            as_root zypper install -y "$@"
+            ;;
+        alpine)
+            as_root apk add "$@"
+            ;;
+        *)
+            log_error "Unsupported distribution: $DISTRO"
+            exit 1
+            ;;
+    esac
+}
+```
+
+## JavaScript Runtime Installation
+
+### Bun Installation (Preferred)
+Reference: [bun.sh](mdc:script/dev-env/Javascript/bun.sh)
+
+```bash
+install_bun() {
+    log_info "Installing Bun JavaScript runtime"
+    
+    # Install dependencies
+    install_dependencies curl unzip
+    
+    # Download and install Bun
+    curl -fsSL https://bun.sh/install | bash
+    
+    # Add to PATH
+    if [[ -f "$HOME/.bashrc" ]]; then
+        echo 'export PATH="$HOME/.bun/bin:$PATH"' >> "$HOME/.bashrc"
+    fi
+    
+    # Verify installation
+    if command -v bun >/dev/null 2>&1; then
+        local version=$(bun --version)
+        log_success "Bun installed: $version"
+        
+        # Install pnpm globally
+        bun install -g pnpm
+        log_success "pnpm package manager installed"
+    else
+        log_error "Bun installation failed"
+        return 1
+    fi
+}
+```
+
+### Node.js Installation
+Reference: [nodejs.sh](mdc:script/dev-env/Javascript/nodejs.sh)
+
+```bash
+install_nodejs() {
+    log_info "Installing Node.js LTS"
+    
+    # Install dependencies
+    install_dependencies curl
+    
+    # Install Node.js via NodeSource repository
+    curl -fsSL https://deb.nodesource.com/setup_lts.x | as_root bash -
+    install_dependencies nodejs
+    
+    # Enable corepack for pnpm
+    as_root corepack enable
+    
+    # Verify installation
+    if command -v node >/dev/null 2>&1; then
+        local version=$(node --version)
+        log_success "Node.js installed: $version"
+        
+        # Install pnpm
+        npm install -g pnpm
+        log_success "pnpm package manager installed"
+    else
+        log_error "Node.js installation failed"
+        return 1
+    fi
+}
+```
+
+### Deno Installation
+Reference: [deno.sh](mdc:script/dev-env/Javascript/deno.sh)
+
+```bash
+install_deno() {
+    log_info "Installing Deno JavaScript runtime"
+    
+    # Install dependencies
+    install_dependencies curl unzip
+    
+    # Download and install Deno
+    curl -fsSL https://deno.land/install.sh | sh
+    
+    # Add to PATH
+    if [[ -f "$HOME/.bashrc" ]]; then
+        echo 'export PATH="$HOME/.deno/bin:$PATH"' >> "$HOME/.bashrc"
+    fi
+    
+    # Verify installation
+    if command -v deno >/dev/null 2>&1; then
+        local version=$(deno --version | head -n1)
+        log_success "Deno installed: $version"
+    else
+        log_error "Deno installation failed"
+        return 1
+    fi
+}
+```
+
+## System Language Installation
+
+### Rust Installation
+Reference: [rust.sh](mdc:script/dev-env/rust.sh)
+
+```bash
+install_rust() {
+    log_info "Installing Rust toolchain"
+    
+    # Install dependencies
+    install_dependencies curl build-essential
+    
+    # Install Rust via rustup
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+    
+    # Add to PATH
+    if [[ -f "$HOME/.bashrc" ]]; then
+        echo 'source "$HOME/.cargo/env"' >> "$HOME/.bashrc"
+    fi
+    
+    # Source environment for current session
+    source "$HOME/.cargo/env"
+    
+    # Install additional components
+    rustup component add rustfmt clippy
+    
+    # Verify installation
+    if command -v rustc >/dev/null 2>&1; then
+        local version=$(rustc --version)
+        log_success "Rust installed: $version"
+    else
+        log_error "Rust installation failed"
+        return 1
+    fi
+}
+```
+
+### Go Installation
+Reference: [golang.sh](mdc:script/dev-env/golang.sh)
+
+```bash
+install_golang() {
+    log_info "Installing Go programming language"
+    
+    # Install dependencies
+    install_dependencies curl wget
+    
+    # Get latest Go version
+    local go_version=$(curl -s https://go.dev/VERSION?m=text)
+    local go_url="https://go.dev/dl/${go_version}.linux-amd64.tar.gz"
+    
+    # Download and install
+    cd /tmp
+    wget -q "$go_url"
+    as_root tar -C /usr/local -xzf "${go_version}.linux-amd64.tar.gz"
+    
+    # Add to PATH
+    if [[ -f "$HOME/.bashrc" ]]; then
+        echo 'export PATH="/usr/local/go/bin:$PATH"' >> "$HOME/.bashrc"
+        echo 'export GOPATH="$HOME/go"' >> "$HOME/.bashrc"
+        echo 'export PATH="$GOPATH/bin:$PATH"' >> "$HOME/.bashrc"
+    fi
+    
+    # Verify installation
+    if command -v go >/dev/null 2>&1; then
+        local version=$(go version)
+        log_success "Go installed: $version"
+    else
+        log_error "Go installation failed"
+        return 1
+    fi
+}
+```
+
+### Python Environment Setup
+Reference: [miniconda.sh](mdc:script/dev-env/miniconda.sh)
+
+```bash
+install_miniconda() {
+    log_info "Installing Miniconda Python environment"
+    
+    # Install dependencies
+    install_dependencies curl wget
+    
+    # Download Miniconda installer
+    local installer_url="https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh"
+    cd /tmp
+    wget -q "$installer_url" -O miniconda.sh
+    
+    # Install Miniconda
+    bash miniconda.sh -b -p "$HOME/miniconda3"
+    
+    # Initialize conda
+    "$HOME/miniconda3/bin/conda" init bash
+    
+    # Add to PATH
+    if [[ -f "$HOME/.bashrc" ]]; then
+        echo 'export PATH="$HOME/miniconda3/bin:$PATH"' >> "$HOME/.bashrc"
+    fi
+    
+    # Verify installation
+    if command -v conda >/dev/null 2>&1; then
+        local version=$(conda --version)
+        log_success "Miniconda installed: $version"
+    else
+        log_error "Miniconda installation failed"
+        return 1
+    fi
+}
+```
+
+## Container and Virtualization
+
+### Docker Installation
+Reference: [docker.sh](mdc:script/dev-env/docker.sh)
+
+```bash
+install_docker() {
+    log_info "Installing Docker"
+    
+    # Install dependencies
+    install_dependencies curl ca-certificates gnupg lsb-release
+    
+    # Add Docker's official GPG key
+    as_root mkdir -p /etc/apt/keyrings
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | as_root gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+    
+    # Add Docker repository
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | as_root tee /etc/apt/sources.list.d/docker.list > /dev/null
+    
+    # Install Docker
+    as_root DEBIAN_FRONTEND=noninteractive apt-get update
+    install_dependencies docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+    
+    # Add user to docker group
+    as_root usermod -aG docker "$USER"
+    
+    # Enable and start Docker
+    as_root systemctl enable docker
+    as_root systemctl start docker
+    
+    # Verify installation
+    if command -v docker >/dev/null 2>&1; then
+        local version=$(docker --version)
+        log_success "Docker installed: $version"
+        log_info "Please log out and back in to use Docker without sudo"
+    else
+        log_error "Docker installation failed"
+        return 1
+    fi
+}
+```
+
+## Development Tools Integration
+
+### Package Manager Integration
+```bash
+setup_package_managers() {
+    # Enable corepack for Node.js package managers
+    if command -v corepack >/dev/null 2>&1; then
+        as_root corepack enable
+        log_success "Corepack enabled for pnpm/yarn"
+    fi
+    
+    # Setup Rust cargo
+    if command -v cargo >/dev/null 2>&1; then
+        cargo install cargo-edit cargo-watch
+        log_success "Rust development tools installed"
+    fi
+    
+    # Setup Go tools
+    if command -v go >/dev/null 2>&1; then
+        go install golang.org/x/tools/gopls@latest
+        go install github.com/go-delve/delve/cmd/dlv@latest
+        log_success "Go development tools installed"
+    fi
+}
+```
+
+### IDE Integration
+```bash
+setup_ide_support() {
+    # Create VS Code settings for better development experience
+    local vscode_dir="$HOME/.vscode-server/data/User"
+    if [[ -d "$vscode_dir" ]]; then
+        mkdir -p "$vscode_dir"
+        cat > "$vscode_dir/settings.json" << EOF
+{
+    "terminal.integrated.defaultProfile.linux": "bash",
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+        "source.organizeImports": true
+    },
+    "typescript.preferences.importModuleSpecifier": "relative",
+    "rust-analyzer.checkOnSave.command": "clippy"
+}
+EOF
+        log_success "VS Code settings configured"
+    fi
+}
+```
+
+## Environment Validation
+
+### Post-Installation Verification
+```bash
+verify_development_environment() {
+    log_info "Verifying development environment"
+    
+    local tools=("node" "bun" "deno" "rustc" "go" "python3" "docker")
+    local installed=()
+    local missing=()
+    
+    for tool in "${tools[@]}"; do
+        if command -v "$tool" >/dev/null 2>&1; then
+            installed+=("$tool")
+        else
+            missing+=("$tool")
+        fi
+    done
+    
+    if [[ ${#installed[@]} -gt 0 ]]; then
+        log_success "Installed tools: ${installed[*]}"
+    fi
+    
+    if [[ ${#missing[@]} -gt 0 ]]; then
+        log_warning "Missing tools: ${missing[*]}"
+    fi
+    
+    # Check PATH
+    log_info "Current PATH: $PATH"
+    
+    # Check environment variables
+    log_info "Environment check complete"
+}
+```
+
+## Performance Optimization
+
+### Language-Specific Optimizations
+```bash
+optimize_rust() {
+    if command -v rustc >/dev/null 2>&1; then
+        # Configure Cargo for better performance
+        mkdir -p "$HOME/.cargo"
+        cat > "$HOME/.cargo/config.toml" << EOF
+[build]
+jobs = $(nproc)
+
+[target.x86_64-unknown-linux-gnu]
+rustflags = ["-C", "target-cpu=native"]
+EOF
+        log_success "Rust build optimization configured"
+    fi
+}
+
+optimize_node() {
+    if command -v node >/dev/null 2>&1; then
+        # Increase Node.js memory limit
+        echo 'export NODE_OPTIONS="--max-old-space-size=4096"' >> "$HOME/.bashrc"
+        log_success "Node.js memory optimization configured"
+    fi
+}
+```
+
+## Cleanup and Maintenance
+
+### Environment Cleanup
+```bash
+cleanup_development_environment() {
+    log_info "Cleaning up development environment"
+    
+    # Clean package caches
+    if command -v npm >/dev/null 2>&1; then
+        npm cache clean --force
+    fi
+    
+    if command -v cargo >/dev/null 2>&1; then
+        cargo clean
+    fi
+    
+    if command -v go >/dev/null 2>&1; then
+        go clean -cache
+    fi
+    
+    # Clean temporary files
+    rm -rf /tmp/miniconda.sh
+    rm -rf /tmp/go*.tar.gz
+    
+    log_success "Development environment cleaned"
+}
+```
+
+## Integration with HADES Manager
+
+### Script Metadata
+Each development environment script should include:
+- Prerequisites and dependencies
+- Installation verification steps
+- Post-installation configuration
+- Performance optimization settings
+- Cleanup procedures
+
+### Error Handling
+```bash
+handle_installation_error() {
+    local tool="$1"
+    local error_code="$2"
+    
+    log_error "Installation of $tool failed with code $error_code"
+    
+    # Provide troubleshooting steps
+    case "$tool" in
+        "bun"|"node"|"deno")
+            log_info "Troubleshooting: Check internet connection and try again"
+            ;;
+        "rust")
+            log_info "Troubleshooting: Ensure build-essential is installed"
+            ;;
+        "docker")
+            log_info "Troubleshooting: Check if Docker repository is accessible"
+            ;;
+    esac
+    
+    return "$error_code"
+}
+```

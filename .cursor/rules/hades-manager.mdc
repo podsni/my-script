@@ -1,0 +1,557 @@
+---
+globs: install.sh,backups.sh,test.sh
+description: "HADES Script Manager system architecture and operation guidelines"
+---
+
+# HADES Script Manager System
+
+This rule covers the core HADES Script Manager system architecture, operation, and maintenance guidelines for the main installer and management scripts.
+
+## System Architecture
+
+### Core Components
+
+#### Main Installer: [install.sh](mdc:install.sh)
+**Purpose**: Interactive script management and execution system
+**Key Features**:
+- Bootstrap repository from remote or local sources
+- Category-based script organization and selection
+- Multi-script execution with error handling
+- Random script selection mode
+- Comprehensive logging and progress tracking
+
+#### Backup System: [backups.sh](mdc:backups.sh)
+**Purpose**: Backup and restore operations for script configurations
+**Integration**: Called by install.sh for configuration backups
+
+#### Testing Framework: [test.sh](mdc:test.sh)
+**Purpose**: Script validation and testing utilities
+**Usage**: Validates script syntax and functionality
+
+## Bootstrap Process
+
+### Repository Detection and Setup
+```bash
+bootstrap_repository() {
+    # Detect if running from local repository
+    if [[ -d "$POSSIBLE_ROOT/script" ]]; then
+        SCRIPT_ROOT="$POSSIBLE_ROOT"
+        SCRIPT_DIR="$SCRIPT_ROOT/script"
+        log_success "Local repository found: $SCRIPT_ROOT"
+    else
+        # Clone or update remote repository
+        if [[ -d "$TARGET_DIR/.git" ]]; then
+            git -C "$TARGET_DIR" pull --ff-only
+        else
+            git clone "$REPO_URL" "$TARGET_DIR"
+        fi
+        exec bash "$TARGET_DIR/install.sh" --local
+    fi
+}
+```
+
+### Environment Configuration
+```bash
+# Repository configuration
+REPO_URL="${MY_SCRIPT_REPO_URL:-https://github.com/podsni/my-script}"
+TARGET_DIR_DEFAULT="$HOME/my-script"
+TARGET_DIR="${MY_SCRIPT_DIR:-$TARGET_DIR_DEFAULT}"
+
+# Script discovery
+SCRIPT_DIR="$SCRIPT_ROOT/script"
+```
+
+## User Interface System
+
+### Color and Display Management
+```bash
+# ANSI color definitions
+declare -r C_RESET='\033[0m'
+declare -r C_BOLD='\033[1m'
+declare -r C_RED='\033[0;31m'
+declare -r C_GREEN='\033[0;32m'
+declare -r C_YELLOW='\033[0;33m'
+declare -r C_BLUE='\033[0;34m'
+
+# Icon definitions
+declare -r ICON_SUCCESS="✅"
+declare -r ICON_ERROR="❌"
+declare -r ICON_WARNING="⚠️"
+declare -r ICON_INFO="ℹ️"
+declare -r ICON_ROCKET="🚀"
+```
+
+### Logging Functions
+```bash
+log_info() {
+    printf "${C_BRIGHT_BLUE}${ICON_INFO}${C_RESET} ${C_BOLD}%s${C_RESET}\n" "$*"
+}
+
+log_success() {
+    printf "${C_BRIGHT_GREEN}${ICON_SUCCESS}${C_RESET} ${C_BOLD}%s${C_RESET}\n" "$*"
+}
+
+log_warning() {
+    printf "${C_BRIGHT_YELLOW}${ICON_WARNING}${C_RESET} ${C_BOLD}%s${C_RESET}\n" "$*"
+}
+
+log_error() {
+    printf "${C_BRIGHT_RED}${ICON_ERROR}${C_RESET} ${C_BOLD}%s${C_RESET}\n" "$*"
+}
+```
+
+### Header and Display Functions
+```bash
+show_header() {
+    clear
+    printf "%b\n" "$ansi_art"
+    
+    local user_name="${SUDO_USER:-${USER:-}}"
+    if [[ -z "$user_name" ]]; then 
+        user_name="$(whoami 2>/dev/null || echo "pengguna")"
+    fi
+    
+    draw_line "═" 75
+    printf "${C_BRIGHT_CYAN}${C_BOLD}  Selamat datang, %s! ${ICON_ROCKET}${C_RESET}\n" "$user_name"
+    printf "${C_CYAN}  Repository:${C_RESET} %s\n" "$REPO_URL"
+    printf "${C_CYAN}  Lokasi:${C_RESET} %s\n" "$TARGET_DIR"
+    printf "${C_CYAN}  Tanggal:${C_RESET} $(date '+%A, %d %B %Y - %H:%M:%S')\n"
+    draw_line "═" 75
+}
+```
+
+## Script Discovery and Management
+
+### Category Detection
+```bash
+detect_categories() {
+    declare -a category_names=()
+    declare -a category_dirs=()
+
+    shopt -s nullglob
+    for d in "$SCRIPT_DIR"/*/; do
+        d="${d%/}"
+        if compgen -G "$d/*.sh" > /dev/null; then
+            category_names+=("$(basename "$d")")
+            category_dirs+=("$d")
+        fi
+    done
+    shopt -u nullglob
+}
+```
+
+### Script Metadata Extraction
+```bash
+get_script_description() {
+    local script_file="$1"
+    local description=""
+    
+    while IFS= read -r line; do
+        if [[ "$line" =~ ^#! ]]; then continue; fi
+        
+        if [[ "$line" =~ ^#[[:space:]]*(.*) ]]; then
+            description="${BASH_REMATCH[1]}"
+            break
+        fi
+        
+        if [[ -n "$line" ]]; then break; fi
+    done < "$script_file"
+    
+    echo "$description"
+}
+```
+
+### Statistics Generation
+```bash
+show_category_stats() {
+    local category_dirs=("$@")
+    local total_scripts=0
+    local total_categories=${#category_dirs[@]}
+    
+    for dir in "${category_dirs[@]}"; do
+        local count=$(find "$dir" -name "*.sh" -type f | wc -l)
+        total_scripts=$((total_scripts + count))
+    done
+    
+    local root_count=$(find "$SCRIPT_DIR" -maxdepth 1 -name "*.sh" -type f | wc -l)
+    total_scripts=$((total_scripts + root_count))
+    
+    printf "\n${C_BG_BLUE}${C_WHITE}${C_BOLD} STATISTIK REPOSITORY ${C_RESET}\n"
+    printf "${C_CYAN}  ${ICON_FOLDER} Total Kategori: ${C_BOLD}%d${C_RESET}\n" "$total_categories"
+    printf "${C_CYAN}  ${ICON_SCRIPT} Total Skrip: ${C_BOLD}%d${C_RESET}\n" "$total_scripts"
+}
+```
+
+## Execution System
+
+### Script Selection Interface
+```bash
+print_script_menu() {
+    local current_category="$1"
+    
+    show_header
+    
+    printf "\n${C_BG_GREEN}${C_BLACK}${C_BOLD} KATEGORI: %-20s | TOTAL SKRIP: %-3d ${C_RESET}\n" \
+           "$current_category" "${#g_scripts[@]}"
+    
+    for i in "${!g_scripts[@]}"; do
+        local script_name="$(basename "${g_scripts[$i]}")"
+        local script_desc="$(get_script_description "${g_scripts[$i]}")"
+        local status_icon="[ ]"
+        local status_color="$C_DIM"
+        
+        if [[ ${g_selected_status[$i]} -eq 1 ]]; then
+            status_icon="[${ICON_SUCCESS}]"
+            status_color="$C_BRIGHT_GREEN"
+        fi
+        
+        printf "  ${status_color}${status_icon}${C_RESET} ${C_BRIGHT_BLUE}%2d)${C_RESET} ${C_BOLD}%-25s${C_RESET}\n" \
+               "$((i+1))" "$script_name"
+        
+        if [[ -n "$script_desc" ]]; then
+            printf "      ${C_DIM}└─ %s${C_RESET}\n" "$script_desc"
+        fi
+    done
+}
+```
+
+### Input Processing
+```bash
+process_user_input() {
+    local choice="$1"
+    
+    case "$choice" in
+        [qQ]) exit 0 ;;
+        [bB]) return 1 ;; # Back to category menu
+        [cC]) return 0 ;; # Continue with selection
+        [aA]) select_all_scripts ;;
+        [nN]) deselect_all_scripts ;;
+        *) process_numeric_input "$choice" ;;
+    esac
+}
+```
+
+### Sudo Requirements Detection
+```bash
+check_sudo_requirements() {
+    local selected_indexes=("$@")
+    local needs_sudo=0
+    
+    for idx in "${selected_indexes[@]}"; do
+        if head -n 5 "${g_scripts[$idx]}" | grep -qi "needs-sudo\|require.*sudo\|require.*root"; then
+            needs_sudo=1
+            break
+        fi
+    done
+    
+    if [[ $needs_sudo -eq 1 ]]; then
+        log_warning "Some scripts require root access (sudo)"
+        if ! sudo -v; then
+            log_error "Failed to obtain sudo access"
+            return 1
+        fi
+        log_success "Sudo access granted"
+    fi
+    
+    return 0
+}
+```
+
+## Execution Engine
+
+### Single Script Execution
+```bash
+execute_single_script() {
+    local script_path="$1"
+    local script_name="$(basename "$script_path")"
+    local start_time=$(date +%s)
+    
+    # Check sudo requirements
+    local needs_sudo=0
+    if head -n 5 "$script_path" | grep -qi "needs-sudo\|require.*sudo\|require.*root"; then
+        needs_sudo=1
+    fi
+    
+    printf "\n${C_BG_BLUE}${C_WHITE}${C_BOLD} MENJALANKAN: %-30s ${C_RESET}\n" "$script_name"
+    
+    # Ensure script is executable
+    chmod +x "$script_path" 2>/dev/null || true
+    
+    # Execute script
+    local cmd="bash"
+    if [[ $needs_sudo -eq 1 ]]; then
+        cmd="sudo bash"
+    fi
+    
+    if $cmd "$script_path"; then
+        local end_time=$(date +%s)
+        local duration=$((end_time - start_time))
+        log_success "Script '$script_name' completed successfully (${duration}s)"
+        return 0
+    else
+        local exit_code=$?
+        log_error "Script '$script_name' failed (exit code: $exit_code)"
+        return $exit_code
+    fi
+}
+```
+
+### Batch Execution Management
+```bash
+execute_selected_scripts() {
+    local selected_indexes=("$@")
+    
+    show_header
+    printf "\n${C_BG_GREEN}${C_BLACK}${C_BOLD} MEMULAI EKSEKUSI SKRIP ${C_RESET}\n"
+    
+    # Setup interrupt handler
+    trap 'log_warning "Execution cancelled by user"; exit 130' INT
+    
+    # Check sudo requirements
+    if ! check_sudo_requirements "${selected_indexes[@]}"; then
+        log_error "Cannot proceed without required sudo access"
+        return 1
+    fi
+    
+    # Execute scripts with error handling
+    declare -a succeeded_scripts=()
+    declare -a failed_scripts=()
+    local overall_start=$(date +%s)
+    
+    for i in "${!selected_indexes[@]}"; do
+        local idx="${selected_indexes[$i]}"
+        local script_path="${g_scripts[$idx]}"
+        local script_name="$(basename "$script_path")"
+        
+        printf "\n${C_BRIGHT_CYAN}${C_BOLD}[%d/%d]${C_RESET} " "$((i+1))" "${#selected_indexes[@]}"
+        
+        if execute_single_script "$script_path"; then
+            succeeded_scripts+=("$script_name")
+        else
+            failed_scripts+=("$script_name")
+            
+            # Ask if user wants to continue on error
+            if [[ $((i+1)) -lt ${#selected_indexes[@]} ]]; then
+                printf "\n${C_BRIGHT_YELLOW}${ICON_WARNING} Script failed.${C_RESET}\n"
+                printf "${C_CYAN}Continue to next script? [Y/n]: ${C_RESET}"
+                read -r continue_choice
+                
+                if [[ "$continue_choice" =~ ^[nN]$ ]]; then
+                    log_info "Execution stopped by user"
+                    break
+                fi
+            fi
+        fi
+    done
+    
+    # Show execution summary
+    local overall_end=$(date +%s)
+    local total_duration=$((overall_end - overall_start))
+    show_execution_summary "$total_duration" "${succeeded_scripts[@]}" "---SEPARATOR---" "${failed_scripts[@]}"
+}
+```
+
+## Error Handling and Recovery
+
+### Global Error Handling
+```bash
+# Set strict error handling
+set -euo pipefail
+
+# Handle script interruption
+trap 'log_warning "Script interrupted by user"; exit 130' INT
+
+# Handle script errors
+trap 'log_error "Script failed at line $LINENO"; exit 1' ERR
+```
+
+### Execution Summary
+```bash
+show_execution_summary() {
+    local total_duration="$1"
+    shift
+    
+    # Parse succeeded and failed scripts
+    local succeeded_scripts=()
+    local failed_scripts=()
+    local parsing_succeeded=true
+    
+    for arg in "$@"; do
+        if [[ "$arg" == "---SEPARATOR---" ]]; then
+            parsing_succeeded=false
+            continue
+        fi
+        
+        if [[ "$parsing_succeeded" == true ]]; then
+            succeeded_scripts+=("$arg")
+        else
+            failed_scripts+=("$arg")
+        fi
+    done
+    
+    printf "\n\n"
+    draw_line "═" 75
+    printf "${C_BG_MAGENTA}${C_WHITE}${C_BOLD} RINGKASAN EKSEKUSI ${C_RESET}\n"
+    draw_line "═" 75
+    
+    printf "\n${C_BRIGHT_BLUE}${ICON_INFO} ${C_BOLD}Execution Statistics:${C_RESET}\n"
+    printf "  • Total execution time: ${C_BOLD}%d seconds${C_RESET}\n" "$total_duration"
+    printf "  • Scripts succeeded: ${C_BRIGHT_GREEN}${C_BOLD}%d${C_RESET}\n" "${#succeeded_scripts[@]}"
+    printf "  • Scripts failed: ${C_BRIGHT_RED}${C_BOLD}%d${C_RESET}\n" "${#failed_scripts[@]}"
+    
+    if [[ ${#succeeded_scripts[@]} -gt 0 ]]; then
+        printf "\n${C_BRIGHT_GREEN}${ICON_SUCCESS} ${C_BOLD}Successful Scripts:${C_RESET}\n"
+        for script in "${succeeded_scripts[@]}"; do
+            printf "  ${C_BRIGHT_GREEN}✓${C_RESET} %s\n" "$script"
+        done
+    fi
+    
+    if [[ ${#failed_scripts[@]} -gt 0 ]]; then
+        printf "\n${C_BRIGHT_RED}${ICON_ERROR} ${C_BOLD}Failed Scripts:${C_RESET}\n"
+        for script in "${failed_scripts[@]}"; do
+            printf "  ${C_BRIGHT_RED}✗${C_RESET} %s\n" "$script"
+        done
+    fi
+}
+```
+
+## Configuration Management
+
+### Environment Variables
+```bash
+# Repository configuration
+export MY_SCRIPT_REPO_URL="${MY_SCRIPT_REPO_URL:-https://github.com/podsni/my-script}"
+export MY_SCRIPT_DIR="${MY_SCRIPT_DIR:-$HOME/my-script}"
+
+# Execution options
+export HADES_NO_COLOR="${HADES_NO_COLOR:-0}"
+export HADES_VERBOSE="${HADES_VERBOSE:-0}"
+export HADES_DRY_RUN="${HADES_DRY_RUN:-0}"
+```
+
+### Configuration Files
+```bash
+# User configuration
+HADES_CONFIG_DIR="$HOME/.config/hades"
+HADES_CONFIG_FILE="$HADES_CONFIG_DIR/config"
+
+# Load user configuration
+load_user_config() {
+    if [[ -f "$HADES_CONFIG_FILE" ]]; then
+        source "$HADES_CONFIG_FILE"
+        log_info "User configuration loaded"
+    fi
+}
+
+# Save user configuration
+save_user_config() {
+    mkdir -p "$HADES_CONFIG_DIR"
+    cat > "$HADES_CONFIG_FILE" << EOF
+# HADES Script Manager Configuration
+# Generated on $(date)
+
+# Repository settings
+MY_SCRIPT_REPO_URL="$REPO_URL"
+MY_SCRIPT_DIR="$TARGET_DIR"
+
+# UI preferences
+HADES_NO_COLOR="$NO_COLOR"
+HADES_VERBOSE="$VERBOSE"
+EOF
+    log_success "Configuration saved to $HADES_CONFIG_FILE"
+}
+```
+
+## Maintenance and Updates
+
+### Self-Update Mechanism
+```bash
+update_hades_manager() {
+    log_info "Checking for HADES Manager updates..."
+    
+    if [[ -d "$TARGET_DIR/.git" ]]; then
+        local current_branch=$(git -C "$TARGET_DIR" branch --show-current)
+        local remote_url=$(git -C "$TARGET_DIR" remote get-url origin)
+        
+        # Fetch latest changes
+        git -C "$TARGET_DIR" fetch origin "$current_branch"
+        
+        # Check if update is available
+        local local_commit=$(git -C "$TARGET_DIR" rev-parse HEAD)
+        local remote_commit=$(git -C "$TARGET_DIR" rev-parse "origin/$current_branch")
+        
+        if [[ "$local_commit" != "$remote_commit" ]]; then
+            log_info "Update available. Updating..."
+            git -C "$TARGET_DIR" pull --ff-only
+            log_success "HADES Manager updated successfully"
+        else
+            log_info "HADES Manager is up to date"
+        fi
+    else
+        log_warning "Not running from git repository. Cannot check for updates."
+    fi
+}
+```
+
+### Health Check System
+```bash
+health_check() {
+    log_info "Performing HADES Manager health check..."
+    
+    local issues=()
+    
+    # Check script directory
+    if [[ ! -d "$SCRIPT_DIR" ]]; then
+        issues+=("Script directory not found: $SCRIPT_DIR")
+    fi
+    
+    # Check for executable scripts
+    local script_count=$(find "$SCRIPT_DIR" -name "*.sh" -type f -executable | wc -l)
+    if [[ $script_count -eq 0 ]]; then
+        issues+=("No executable scripts found")
+    fi
+    
+    # Check dependencies
+    for cmd in bash git curl; do
+        if ! command -v "$cmd" >/dev/null 2>&1; then
+            issues+=("Required command not found: $cmd")
+        fi
+    done
+    
+    if [[ ${#issues[@]} -eq 0 ]]; then
+        log_success "Health check passed. Found $script_count executable scripts."
+    else
+        log_error "Health check failed:"
+        for issue in "${issues[@]}"; do
+            printf "  ${C_RED}•${C_RESET} %s\n" "$issue"
+        done
+        return 1
+    fi
+}
+```
+
+## Integration Guidelines
+
+### Script Integration Requirements
+Scripts must be compatible with HADES Manager by:
+1. Using standard shebang: `#!/usr/bin/env bash`
+2. Implementing proper error handling: `set -euo pipefail`
+3. Supporting help flag: `--help` or `-h`
+4. Including descriptive comments for metadata extraction
+5. Using consistent logging functions
+6. Handling sudo requirements appropriately
+
+### Performance Optimization
+- Use efficient file operations for script discovery
+- Cache script metadata when possible
+- Implement lazy loading for large script collections
+- Optimize UI rendering for better responsiveness
+- Use background processes for long-running operations
+
+### Security Considerations
+- Validate all user inputs
+- Sanitize script paths and names
+- Implement proper privilege escalation handling
+- Log all administrative actions
+- Provide audit trails for script execution
+- Handle sensitive data securely
